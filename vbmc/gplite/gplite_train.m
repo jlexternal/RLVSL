@@ -1,61 +1,102 @@
-function [gp,hyp,output] = gplite_train(hyp0,Ns,X,y,meanfun,hprior,options)
+function [gp,hyp,output] = gplite_train(hyp0,Ns,X,y,covfun,meanfun,noisefun,s2,hprior,options)
 %GPLITE_TRAIN Train lite Gaussian Process hyperparameters.
+%
+% Documentation to be written.
+%
+% Luigi Acerbi 2019
 
-% Fix functions
 
-if nargin < 5; meanfun = []; end
-if nargin < 6; hprior = []; end
-if nargin < 7; options = []; end
+if nargin < 5; covfun = []; end
+if nargin < 6; meanfun = []; end
+if nargin < 7; noisefun = []; end
+if nargin < 8; s2 = []; end
+if nargin < 9; hprior = []; end
+if nargin < 10; options = []; end
+
+%% Assign options and defaults
+
+% Default covariance function is squared exponential ARD
+if isempty(covfun); covfun = 'seard'; end
 
 % Default mean function is constant
 if isempty(meanfun); meanfun = 'const'; end
 
-Nopts = [];
-if isfield(options,'Nopts'); Nopts = options.Nopts; end
-if isempty(Nopts); Nopts = 3; end   % Number of hyperparameter optimization runs
+% Default noise function (constant noise, plus provided estimated noise)
+if isempty(noisefun)
+    if isempty(s2); noisefun = [1 0 0]; else; noisefun = [1 1 0]; end
+end
 
-Ninit = [];
-if isfield(options,'Ninit'); Ninit = options.Ninit; end
-if isempty(Ninit); Ninit = 2^10; end   % Initial design size for hyperparameter optimization
+% Default options
+defopts.Nopts           = 3;         % # hyperparameter optimization runs
+defopts.Ninit           = 2^10;      % Initial design size for hyperparameter optimization
+defopts.InitMethod      = 'sobol';   % Default initial design method
+defopts.Thin            = 5;         % Thinning for hyperparameter sampling
+defopts.Burnin          = [];        % Initial burn-in for hyperparameter sampling
+defopts.DfBase          = 7;         % Default degrees of freedom for Student's t prior
+defopts.Sampler         = 'slicesample';    % Default MCMC sampler for hyperparameters
+defopts.Widths          = [];        % Default widths
+defopts.LogP            = [];        % Old log probability associated to starting points
+defopts.OutwarpFun      = [];        % Output warping function
+defopts.Stepsize        = [];        % Default step size for MALA sampler
+defopts.TolOpt          = 1e-5;      % Optimization tolerance for stopping
+defopts.TolOptMCMC      = 1e-3;      % Preliminary optimization tolerance when doing MCMC
 
-Thin = [];
-if isfield(options,'Thin'); Thin = options.Thin; end
-if isempty(Thin); Thin = 5; end   % Thinning for hyperparameter sampling
+for f = fields(defopts)'
+    if ~isfield(options,f{:}) || isempty(options.(f{:}))
+        options.(f{:}) = defopts.(f{:});
+    end
+end
 
-Burnin = [];
-if isfield(options,'Burnin'); Burnin = options.Burnin; end
-if isempty(Burnin); Burnin = Thin*Ns; end   % Initial design size for hyperparameter optimization
+% Default burn-in is proportional to the thinning factor
+if isempty(options.Burnin); options.Burnin = options.Thin*Ns; end
 
-DfBase = [];
-if isfield(options,'DfBase'); DfBase = options.DfBase; end
-if isempty(DfBase); DfBase = 7; end   % Default degrees of freedom for Student's t prior
+Nopts = options.Nopts;
+Ninit = options.Ninit;
+InitMethod = options.InitMethod;
+Thin = options.Thin;
+Burnin = options.Burnin;
+DfBase = options.DfBase;
+Widths = options.Widths;
+LogP = options.LogP;
+outwarpfun = options.OutwarpFun;
+Stepsize = options.Stepsize;
+TolOpt = options.TolOpt;
+TolOptMCMC = options.TolOptMCMC;
 
-Sampler = [];
-if isfield(options,'Sampler'); Sampler = options.Sampler; end
-if isempty(Sampler); Sampler = 'slicesample'; end   % Default MCMC sampler for hyperparameters
+%% Initialize inference of GP hyperparameters (bounds, priors, etc.)
 
-Widths = [];
-if isfield(options,'Widths'); Widths = options.Widths; end
-if isempty(Widths); Widths = []; end   % Default widths (used only for HMC sampler)
+% If using Laplace method, perform at least one optimization
+if strcmpi(options.Sampler,'laplace')
+    Nopts = max(Nopts,1);
+end
 
-LogP = [];
-if isfield(options,'LogP'); LogP = options.LogP; end
-if isempty(LogP); LogP = []; end   % Old log probability associated to starting points 
+% Get covariance/noise/mean functions info
+[Ncov,covinfo] = gplite_covfun('info',X,covfun,[],y);
+[Nnoise,noiseinfo] = gplite_noisefun('info',X,noisefun,y,s2);
+[Nmean,meaninfo] = gplite_meanfun('info',X,meanfun,y);
 
+% Output warping
+outwarp_flag = ~isempty(outwarpfun);
+if outwarp_flag
+    [Noutwarp,outwarpinfo] = outwarpfun('info',y);
+else
+    Noutwarp = 0;
+    outwarpinfo.LB = []; outwarpinfo.UB = [];
+    outwarpinfo.PLB = []; outwarpinfo.PUB = [];
+end
 
-[N,D] = size(X);            % Number of training points and dimension
-ToL = 1e-6;
-
-X_prior = X;
-y_prior = y;
-
-Ncov = D+1;     % Number of covariance function hyperparameters
-
-% Get mean function hyperparameter info
-[Nmean,meaninfo] = gplite_meanfun([],X_prior,meanfun,y_prior);
-
-if isempty(hyp0); hyp0 = zeros(Ncov+Nmean+1,1); end
-[Nhyp,N0] = size(hyp0);      % Hyperparameters
+% Hyperparameters
+if isstruct(hyp0) && isfield(hyp0,'trinfo') && isfield(hyp0,'w')
+    % Initialize with variational posterior over hyperparameters
+    vp = hyp0;
+    Ninit = 0;
+    Nopts = 0;
+    hyp0 = [];
+else
+    vp = [];
+end
+if isempty(hyp0); hyp0 = zeros(Ncov+Nnoise+Nmean+Noutwarp,1); end
+Nhyp = size(hyp0,1);
 
 LB = [];
 UB = [];
@@ -65,84 +106,71 @@ if isempty(LB); LB = NaN(1,Nhyp); end
 if isempty(UB); UB = NaN(1,Nhyp); end
 LB = LB(:)'; UB = UB(:)';
 
-if ~isfield(hprior,'mu') || isempty(hprior.mu)
-    hprior.mu = NaN(Nhyp,1);
-end
-if ~isfield(hprior,'sigma') || isempty(hprior.sigma)
-    hprior.sigma = NaN(Nhyp,1);
-end
-if ~isfield(hprior,'df') || isempty(hprior.df)
-    hprior.df = DfBase*ones(Nhyp,1);
-end
+if ~isfield(hprior,'mu'); hprior.mu = []; end
+if ~isfield(hprior,'sigma'); hprior.sigma = []; end
+if ~isfield(hprior,'df'); hprior.df = []; end
+
 if numel(hprior.mu) < Nhyp; hprior.mu = [hprior.mu(:); NaN(Nhyp-numel(hprior.mu),1)]; end
 if numel(hprior.sigma) < Nhyp; hprior.sigma = [hprior.sigma(:); NaN(Nhyp-numel(hprior.sigma),1)]; end
 if numel(hprior.df) < Nhyp; hprior.df = [hprior.df(:); NaN(Nhyp-numel(hprior.df),1)]; end
 
+hprior.df(isnan(hprior.df)) = DfBase;
 
-% Default hyperparameter lower and upper bounds, if not specified
-width = max(X_prior) - min(X_prior);
-height = max(y_prior)-min(y_prior);
+% Set covariance/noise/mean functions hyperparameters lower bounds
+LB_cov = LB(1:Ncov); idx = isnan(LB_cov); LB_cov(idx) = covinfo.LB(idx);
+LB_noise = LB(Ncov+1:Ncov+Nnoise); idx = isnan(LB_noise); LB_noise(idx) = noiseinfo.LB(idx);
+LB_mean = LB(Ncov+Nnoise+1:Ncov+Nnoise+Nmean); idx = isnan(LB_mean); LB_mean(idx) = meaninfo.LB(idx);
 
+% Set covariance/noise/mean functions hyperparameters upper bounds
+UB_cov = UB(1:Ncov); idx = isnan(UB_cov); UB_cov(idx) = covinfo.UB(idx);
+UB_noise = UB(Ncov+1:Ncov+Nnoise); idx = isnan(UB_noise); UB_noise(idx) = noiseinfo.UB(idx);
+UB_mean = UB(Ncov+Nnoise+1:Ncov+Nnoise+Nmean); idx = isnan(UB_mean); UB_mean(idx) = meaninfo.UB(idx);
 
-% Read hyperparameter bounds, if specified; otherwise set defaults
-LB_ell = LB(1:D);   
-idx = isnan(LB_ell);                 LB_ell(idx) = log(width(idx))+log(ToL);
-LB_sf = LB(D+1);        if isnan(LB_sf); LB_sf = log(height)+log(ToL); end
-LB_sn = LB(Ncov+1);     if isnan(LB_sn); LB_sn = log(ToL); end
-
-% Set mean function hyperparameters lower bounds
-LB_mean = LB(Ncov+2:D+2+Nmean);
-idx = isnan(LB_mean);
-LB_mean(idx) = meaninfo.LB(idx);
-
-UB_ell = UB(1:D);   
-idx = isnan(UB_ell);    UB_ell(idx) = log(width(idx)*10);
-UB_sf = UB(D+1);        if isnan(UB_sf); UB_sf = log(height*10); end
-UB_sn = UB(Ncov+1);     if isnan(UB_sn); UB_sn = log(height); end
-
-% Set mean function hyperparameters upper bounds
-UB_mean = UB(Ncov+2:D+2+Nmean);
-idx = isnan(UB_mean);
-UB_mean(idx) = meaninfo.UB(idx);
+% Set output warping function hyperparameters bounds (if used)
+if outwarp_flag
+    LB_outwarp = LB(Ncov+Nnoise+Nmean+1:Ncov+Nnoise+Nmean+Noutwarp); 
+    idx = isnan(LB_outwarp); LB_outwarp(idx) = outwarpinfo.LB(idx);
+    UB_outwarp = UB(Ncov+Nnoise+Nmean+1:Ncov+Nnoise+Nmean+Noutwarp); 
+    idx = isnan(UB_outwarp); UB_outwarp(idx) = outwarpinfo.UB(idx);
+else
+    LB_outwarp = []; UB_outwarp = [];
+end
 
 % Create lower and upper bounds
-LB = [LB_ell,LB_sf,LB_sn,LB_mean];
-UB = [UB_ell,UB_sf,UB_sn,UB_mean];
+LB = [LB_cov,LB_noise,LB_mean,LB_outwarp];
+UB = [UB_cov,UB_noise,UB_mean,UB_outwarp];
 UB = max(LB,UB);
 
 % Plausible bounds for generation of starting points
-PLB_ell = log(width)+0.5*log(ToL);
-PUB_ell = log(width);
+PLB_cov = covinfo.PLB;      PUB_cov = covinfo.PUB;
+PLB_noise = noiseinfo.PLB;  PUB_noise = noiseinfo.PUB;
+PLB_mean = meaninfo.PLB;    PUB_mean = meaninfo.PUB;
 
-PLB_sf = log(height)+0.5*log(ToL);
-PUB_sf = log(height);
+if outwarp_flag
+    PLB_outwarp = outwarpinfo.PLB;    PUB_outwarp = outwarpinfo.PUB;
+else
+    PLB_outwarp = []; PUB_outwarp = [];
+end
 
-PLB_sn = 0.5*log(ToL);
-PUB_sn = log(std(y_prior));
-
-PLB_mean = meaninfo.PLB;
-PUB_mean = meaninfo.PUB;
-
-PLB = [PLB_ell,PLB_sf,PLB_sn,PLB_mean];
-PUB = [PUB_ell,PUB_sf,PUB_sn,PUB_mean];
-
+PLB = [PLB_cov,PLB_noise,PLB_mean,PLB_outwarp];
+PUB = [PUB_cov,PUB_noise,PUB_mean,PUB_outwarp];
 PLB = min(max(PLB,LB),UB);
 PUB = max(min(PUB,UB),LB);
 
-gptrain_options = optimoptions('fmincon','GradObj','on','Display','off');    
-
 %% Hyperparameter optimization
-if Ns > 0
-    gptrain_options.TolFun = 0.1;  % Limited optimization
+gptrain_options = optimoptions('fmincon','GradObj','on','Display','off');
+
+if Ns > 0 && ~strcmpi(options.Sampler,'laplace')
+    gptrain_options.TolFun = TolOptMCMC;  % Limited optimization
 else
-    gptrain_options.TolFun = 1e-6;        
+    gptrain_options.TolFun = TolOpt;
 end
 
 hyp = zeros(Nhyp,Nopts);
 nll = [];
 
 % Initialize GP
-gp = gplite_post(hyp0(:,1),X,y,meanfun);
+gp = gplite_post(hyp0(:,1),X,y,covfun,meanfun,noisefun,s2,0,outwarpfun);
 
 % Define objective functions for optimization
 gpoptimize_fun = @(hyp_) gp_objfun(hyp_(:),gp,hprior,0,0);
@@ -158,10 +186,10 @@ if ~isempty(LogP) && Ns > 0
     
     ESS_thresh = 0.5;
     % Little change, keep sampling
-    if ESS_frac > ESS_thresh && strcmpi(Sampler,'slicelite')
+    if ESS_frac > ESS_thresh && strcmpi(options.Sampler,'slicelite')
         Ninit = 0;
         Nopts = 0;
-        if strcmpi(Sampler,'slicelite')
+        if strcmpi(options.Sampler,'slicelite')
             Thin_eff = max(1,round(Thin*(1 - (ESS_frac-ESS_thresh)/(1-ESS_thresh))));
             Burnin = Thin_eff*Ns;
             Thin = 1;
@@ -170,11 +198,53 @@ if ~isempty(LogP) && Ns > 0
 end
 
 % First evaluate GP log posterior on an informed space-filling design
+timer1 = tic;
 if Ninit > 0
     optfill.FunEvals = Ninit;
+    optfill.Method = InitMethod;
     [~,~,~,output_fill] = fminfill(gpoptimize_fun,hyp0',LB,UB,PLB,PUB,hprior,optfill);
     hyp(:,:) = output_fill.X(1:Nopts,:)';
     widths_default = std(output_fill.X,[],1);
+    
+    % Extract a good low-noise starting point for the 2nd optimization
+    if Nnoise > 0 && Nopts > 1 && Ninit > Nopts
+        xx = output_fill.X(Nopts+1:end,:);        
+        noise_y = output_fill.fvals(Nopts+1:end);
+        noise_params = xx(:,Ncov+1);
+        % Order by noise parameter magnitude
+        [~,ord] = sort(noise_params,'ascend');
+        xx = xx(ord,:);
+        noise_y = noise_y(ord);
+        % Take best amongst bottom 20% vectors
+        [~,idx_best] = min(noise_y(1:ceil(0.2*end)));
+        hyp(:,2) = xx(idx_best,:)';
+    end
+    
+    if 0
+        tic
+        tprior = hprior;
+        for i = 1:4
+            optfill.FunEvals = ceil(Ninit/5);
+            [~,~,~,output_fill2] = fminfill(gpoptimize_fun,hyp0',LB,UB,PLB,PUB,tprior,optfill);            
+            hyp0 = output_fill2.X(1:Nopts,:)';
+            
+            % Compute vector weights
+            nmu = 0.5*size(output_fill2.X,1);
+            weights = log(nmu+1/2)-log(1:floor(nmu));
+            weights = weights'./sum(weights);
+
+            X_top = output_fill2.X(1:numel(weights),:);
+            
+            tprior.mu = sum(bsxfun(@times,weights,X_top),1);
+            tprior.sigma = sqrt(sum(bsxfun(@times,weights,bsxfun(@minus,X_top,tprior.mu).^2),1));
+            tprior.df = 7*ones(1,Nhyp);
+        end
+        hyp = output_fill2.X(1:Nopts,:)';
+        widths_default = std(output_fill2.X,[],1);
+        toc        
+        [output_fill.fvals(1),output_fill2.fvals(1)]
+    end
+    
 else
     if isempty(nll)
         nll = Inf(1,size(hyp0,2));
@@ -185,36 +255,65 @@ else
     widths_default = PUB - PLB;
 end
 
+% Fix zero widths
+idx0 = widths_default == 0;
+if any(idx0)
+    if size(hyp,2) > 1
+        stdhyp = std(hyp,[],2);
+        widths_default(idx0) = stdhyp(idx0);
+    end
+    idx0 = widths_default == 0;    
+    if any(idx0); widths_default(idx0) = min(1,UB(idx0) - LB(idx0)); end    
+end
+
+t1 = toc(timer1);
+
 % Check that hyperparameters are within bounds
 hyp = bsxfun(@min,UB'-eps(UB'),bsxfun(@max,LB'+eps(LB'),hyp));
 
-%tic
+timer2 = tic;
 % Perform optimization from most promising NOPTS hyperparameter vectors
 for iTrain = 1:Nopts
-    nll = Inf(1,Nopts);
-    try
-        [hyp(:,iTrain),nll(iTrain)] = ...
+    nll(iTrain) = Inf;
+    try        
+%         if 0
+%             [~,idx] = max(y);
+%             idx = unique([idx, randperm(size(X,1),50)]);
+%             gp_lite = gplite_post(hyp0(:,1),X(idx,:),y(idx),covfun,meanfun,noisefun,s2,0,outwarpfun);
+%             gpoptimize_fun_lite = @(hyp_) gp_objfun(hyp_(:),gp_lite,hprior,0,0);
+%             tic
+%             hyp_temp = ...
+%                 fmincon(gpoptimize_fun_lite,hyp(:,iTrain),[],[],[],[],LB,UB,[],gptrain_options);
+%             [hyp2(:,iTrain),nll2(iTrain)] = ...
+%                 fmincon(gpoptimize_fun,hyp_temp,[],[],[],[],LB,UB,[],gptrain_options);
+%             toc
+%         end        
+        [hyp(:,iTrain),nll(iTrain),~,opt_output(iTrain)] = ...
             fmincon(gpoptimize_fun,hyp(:,iTrain),[],[],[],[],LB,UB,[],gptrain_options);
     catch
         % Could not optimize, keep starting point
     end
 end
-%toc
 
 [~,idx] = min(nll); % Take best hyperparameter vector
 hyp_start = hyp(:,idx);
 
+t2 = toc(timer2);
+
 % Check that starting point is inside current bounds
 hyp_start = min(max(hyp_start',LB+eps(LB)),UB-eps(UB))';
+idx_fixed = (LB == UB);
+hyp_start(idx_fixed) = LB(idx_fixed);
 
 logp_prethin = [];  % Log posterior of samples
 
 %% Sample from best hyperparameter vector using slice sampling
+timer3 = tic;
 if Ns > 0
     
     Ns_eff = Ns*Thin;   % Effective number of samples (thin after)
     
-    switch lower(Sampler)
+    switch lower(options.Sampler)
         case 'slicesample'
             gpsample_fun = @(hyp_) gp_objfun(hyp_(:),gp,hprior,0,1);
             sampleopts.Thin = 1;
@@ -227,11 +326,36 @@ if Ns > 0
                 Widths = min(Widths(:)',widths_default);
                 % [Widths; widths_default]
             end
-            
             [samples,fvals,exitflag,output] = ...
                 slicesamplebnd(gpsample_fun,hyp_start',Ns_eff,Widths,LB,UB,sampleopts);
             hyp_prethin = samples';
             logp_prethin = fvals;
+            % output
+            
+        case 'npv'
+            gpsample_fun = @(hyp_) gp_objfun(hyp_(:),gp,hprior,0,1);
+            
+            npvopts.SpecifyHessianDiag = false;
+            npvopts.TolFun = 1e-2;
+%            npvopts.Optimizer = 'adam';
+            npvopts.Optimizer = 'fmincon';
+            npvopts.VariationalBoosting = true;
+            npvopts.MaxIter = 2;
+            
+            tic
+            if isempty(vp)
+                [vp,elbo] = npvlite(gpsample_fun,hyp_start',LB,UB,npvopts);
+            else
+%                npvopts.CoordinateAscent = true;
+%                npvopts.VariationalBoosting = false;
+%                npvopts.MaxIter = 3;                
+                [vp,elbo] = npvlite(gpsample_fun,vp,LB,UB,npvopts);                
+            end
+            toc
+
+            samples = bsxfun(@max,bsxfun(@min,vbmc_rnd(vp,Ns_eff),UB),LB);
+            hyp_prethin = samples';
+            logp_prethin = NaN(Ns_eff,1);
                         
         case 'slicelite'
             gpsample_fun = @(hyp_) gp_objfun(hyp_(:),gp,hprior,0,1);
@@ -244,8 +368,6 @@ if Ns > 0
                 Widths = min(Widths(:)',widths_default);
                 % [Widths; widths_default]
             end
-            
-            
             
             try
             if Nopts == 0
@@ -283,8 +405,32 @@ if Ns > 0
             samples = ...
                 eissample_lite(gpsample_fun,hyp_start',Ns_eff,W,Widths,LB,UB,sampleopts);
             hyp_prethin = samples';            
+
+        case 'mala'
+            gpsample_fun = @(hyp_) gp_objfun(hyp_(:),gp,hprior,0,1);
             
-        case 'hmc'            
+            sampleopts.Thin = 1;
+            sampleopts.Burnin = Burnin*Nhyp;
+            sampleopts.Display = 'off';
+            sampleopts.Diagnostics = false;
+            sampleopts.Stepsize = Stepsize;
+            if isempty(Widths)
+                Widths = widths_default; 
+            else
+                Widths = min(Widths(:)',widths_default);
+                % [Widths; widths_default]
+            end
+            
+            Ns_eff = Ns_eff*Nhyp;
+            
+            [samples,fvals,exitflag,output] = ...
+                malasample_vbmc(gpsample_fun,hyp_start',Ns_eff,Widths,-Inf,Inf,sampleopts);
+            hyp_prethin = samples';
+            logp_prethin = fvals;  
+            
+            Thin = Thin*Nhyp;
+            
+        case 'hmc'
             gpsample_fun = @(hyp_) gp_objfun(hyp_(:),gp,hprior,0,0);
             sampleopts.display = 0;
             sampleopts.checkgrad = 0;
@@ -298,6 +444,12 @@ if Ns > 0
             [samples,fvals,diagn] = ...
                 hmc2(gpsample_fun,hyp_start',sampleopts,@(hyp) gpgrad_fun(hyp,gpsample_fun));            
             hyp_prethin = samples';
+            
+        case 'laplace'
+            %gpsample_fun = @(hyp_) gp_objfun(hyp_(:),gp,hprior,0,0);            
+            %H = hessian(gpsample_fun,hyp_start');
+            %hyp_prethin = mvnrnd(hyp_start',inv(H),Thin*Ns)';
+            %logp_prethin = NaN(Thin*Ns,1);
             
         otherwise
             error('gplite_train:UnknownSampler', ...
@@ -314,6 +466,9 @@ else
     logp_prethin = -nll;
     logp = -nll(idx);
 end
+t3 = toc(timer3);
+
+% [t1 t2 t3]
 
 % Recompute GP with finalized hyperparameters
 gp = gp_objfun(hyp,gp,[],1);
@@ -327,15 +482,8 @@ if nargout > 2
     output.hyp_prethin = hyp_prethin;
     output.logp = logp;
     output.logp_prethin = logp_prethin;
+    if strcmpi(options.Sampler,'npv'); output.hyp_vp = vp; end
 end
-
-
-% Check GP posteriors
-% for s = 1:numel(gp.post)
-%     if ~all(isfinite(gp.post(s).L(:)))
-%         pause
-%     end
-% end
 
 
 end
@@ -355,7 +503,13 @@ if nargin < 5 || isempty(swapsign); swapsign = 0; end
 compute_grad = nargout > 1 && ~gpflag;
 
 if gpflag
-    gp = gplite_post(hyp(1:end,:),gp.X,gp.y,gp.meanfun);
+    if isfield(gp,'outwarpfun'); outwarpfun = gp.outwarpfun; else; outwarpfun = []; end
+    if isfield(gp,'intmeanfun') && gp.intmeanfun > 0
+        meanfun = {gp.meanfun,gp.intmeanfun,gp.intmeanfun_mean,gp.intmeanfun_var};
+    else
+        meanfun = gp.meanfun;
+    end
+    gp = gplite_post(hyp(1:end,:),gp.X,gp.y,gp.covfun,meanfun,gp.noisefun,gp.s2,[],outwarpfun);
     nlZ = gp;
 else
 
@@ -390,11 +544,7 @@ else
         nlZ = NaN;
         dnlZ = NaN(size(hyp));        
     end
-    
-%     if compute_grad
-%         dnlZ
-%     end
-        
+            
 end
 
 end

@@ -4,6 +4,7 @@
 %  Example 2: Non-bound constraints
 %  Example 3: Extended usage and output diagnostics
 %  Example 4: Multiple runs as validation
+%  Example 5: Noisy log-likelihood evaluations
 %
 %  Note: after installation, run 
 %    vbmc('test') 
@@ -14,7 +15,7 @@
 %
 %  See also VBMC.
 
-% Luigi Acerbi 2018
+% Luigi Acerbi 2018-2020
 
 fprintf('Running some examples usage for Variational Bayesian Monte Carlo (VBMC).\n');
 fprintf('Open ''vbmc_examples.m'' in the editor to read detailed comments along the tutorial.\n');
@@ -91,7 +92,7 @@ fprintf('  Press any key to continue.\n\n');
 pause;
 
 % First, let us generate a million samples from the variational posterior:
-Xs = vbmc_rnd(vp,1e6);
+Xs = vbmc_rnd(vp,3e5);
 
 % Easily compute statistics such as moments, credible intervals, etc.
 post_mean = mean(Xs,1);                   % Posterior mean
@@ -171,7 +172,7 @@ pause;
 
 close all;
 
-Xs = vbmc_rnd(vp,1e6);  % Generate samples from the variational posterior
+Xs = vbmc_rnd(vp,3e5);  % Generate samples from the variational posterior
 
 % We compute the pdf of the approximate posterior on a 2-D grid
 plot_lb = [0 0];
@@ -283,7 +284,7 @@ exitflag
 fprintf('  An EXITFLAG of 0 means that the algorithm has exhausted the budget of function evals.\n');
 
 output
-fprintf('  In the OUTPUT struct:\n  - the ''convergencestatus'' field says ''%s'' (probable lack of convergence);\n  - the reliabiltiy index ''rindex'' is %.2f (rindex needs to be less than one).\n\n', ...
+fprintf('  In the OUTPUT struct:\n  - the ''convergencestatus'' field says ''%s'' (probable lack of convergence);\n  - the reliability index ''rindex'' is %.2f (rindex needs to be less than one).\n\n', ...
     output.convergencestatus,output.rindex);
 
 fprintf('  Our diagnostics tell that this run has not converged, suggesting to increase the budget.\n');
@@ -436,6 +437,98 @@ stats
 
 fprintf('\n  Press any key to continue.\n\n');
 pause;
+
+
+%% Example 5: Noisy log-likelihood evaluations
+
+close all;
+folder = fileparts(which('vbmc.m'));
+addpath([folder filesep 'utils']);  % Ensure that UTILS is on the path
+
+%fprintf('\n*** Example 5: Noisy log-likelihood evaluations\n');
+%fprintf('  As in Example 2, but we assume a noisy evaluation of the log-likelihood.\n');
+%fprintf('  Here we emulate a noisy scenario by adding random Gaussian noise to the function evaluations.\n');
+%fprintf('  In practice, noisy evaluations often emerge from estimation techniques for simulation-based\n');
+%fprintf('  models, such as <a href="https://github.com/lacerbi/ibs">Inverse Binomial Sampling (IBS)</a>.\n');
+%fprintf('  Press any key to continue.\n\n');
+fprintf('\n*** Example 5: Noisy log-likelihood evaluations\n');
+fprintf('  Example application of VBMC to a scenario where the log-likelihood evaluations are noisy.\n\n');
+fprintf('  Here we show how to recover the posterior distribution for a model for which we can\n');
+fprintf('  only generate simulated data. To estimate the log-likelihood via simulation, we use\n');
+fprintf('  <a href="https://github.com/lacerbi/ibs">Inverse Binomial Sampling (IBS)</a>, but other estimation techniques can be used as well.\n');
+fprintf('  Importantly, IBS returns a noisy but unbiased estimate of the log-likelihood, and also\n');
+fprintf('  the uncertainty of the estimate (required by VBMC).\n');
+fprintf('  Press any key to continue.\n\n');
+pause;
+
+% For this example, we use a simple "psycometric function" model common in 
+% computational and cognitive neuroscience. In reality, we can easily 
+% compute the likelihood of this model analytically, but for the purpose of 
+% this example we take it as a simulation-only model.
+
+% First, we simulate a synthetic dataset to fit.
+% Normally, you would have your own (real or simulated) data here.
+
+Ntrials = 600;
+eta = log(1);                   % Fake subject (log) sensory noise
+bias = 0.2;                     % Fake subject bias
+lapse = 0.03;                   % Fake subject lapse rate
+theta_true = [eta,bias,lapse];  % Generating parameter vector
+
+S = 3*randn(Ntrials,1);        % Generate stimulus orientation per trial
+R = psycho_gen(theta_true,S);  % Generate fake subject responses
+
+% We set the lower/upper bounds (in particular, note that we set a nonzero 
+% lower bound for the lapse rate, which is required by IBS)
+LB = [log(0.1) -2 0.01];
+UB = [log(10) 2 1];
+PLB = [log(0.2) -1 0.02];
+PUB = [log(5) 1 0.2];
+
+% We define the positive log-likelihood function via a call to IBSLIKE
+% (IBSLIKE provides a vectorized implementation of IBS for MATLAB)
+% For more information, see here: https://github.com/lacerbi/ibs
+
+% Options for IBSLIKE
+options_ibs.Nreps = 100;            % Try and have a SD ~ 1 (and below 3)
+options_ibs.ReturnPositive = true;  % Return *positive* log-likelihood
+options_ibs.ReturnStd  = true;      % 2nd output is SD (not variance!)
+
+llfun = @(theta) ibslike(@psycho_gen,theta,R,S,options_ibs);
+
+D = 3;
+
+% We use a trapezoidal or "tent" prior over the parameters (flat between 
+% PLB and PUB, and linearly decreasing to 0 towards LB and UB). 
+lpriorfun = @(x) log(mtrapezpdf(x,LB,PLB,PUB,UB));
+
+% Since LLFUN has now two outputs (the log likelihood at X, and the
+% estimated SD of the log likelihood at X), we cannot directly sum the log
+% prior and the log likelihood. Thus, we use an auxiliary function LPOSTFUN
+% that does exactly this.
+
+fun = @(x) lpostfun(x,llfun,lpriorfun);     % Log joint
+
+x0 = 0.5*(PLB+PUB);
+options = vbmc('defaults');
+options.Plot = true;        % Plot iterations
+options.SpecifyTargetNoise = true;  % Noisy function evaluations 
+
+% Run VBMC
+[vp,elbo,elbo_sd] = vbmc(fun,x0,LB,UB,PLB,PUB,options);
+
+fprintf('  Have a look at the triangle-plot visualization of the approximate posterior.\n')
+fprintf('  The black line represents the true generating parameters for the fake dataset.\n')
+fprintf('  Press any key to continue.\n\n');
+pause;
+
+close all;
+
+Xs = vbmc_rnd(vp,3e5);  % Generate samples from the variational posterior
+
+close all;
+cornerplot(Xs,{'\eta (log noise)','bias','lapse'},[eta,bias,lapse]);
+
 
 fprintf('  This is all for this tutorial.\n');
 fprintf('  You can read more detailed comments by opening the file ''vbmc_examples.m'' in the editor.\n\n');

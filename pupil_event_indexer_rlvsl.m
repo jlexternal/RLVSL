@@ -57,7 +57,7 @@ for i = 1:len_tsmp-1
         imsg(ptr_smsg) = j;      % log index of the event in sampling array
         ptr_smsg = ptr_smsg + 1; % move the pointer along smsg
         
-        if tmsg(ptr_smsg) == tmsg(ptr_smsg) % if two events occur concurrently
+        if ptr_smsg<length(tmsg) && tmsg(ptr_smsg) == tmsg(ptr_smsg-1) % if two events occur concurrently
             imsg(ptr_smsg) = j;
             ptr_smsg = ptr_smsg + 1;
         end

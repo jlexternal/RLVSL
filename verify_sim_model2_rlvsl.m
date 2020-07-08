@@ -26,7 +26,7 @@ cfg_mod         = struct;
 cfg_mod.nsims   = 1;    % default should be 1
 cfg_mod.alpha   = alpha;
 cfg_mod.zeta    = 0.6;  % should be fitted for each quarter as below
-cfg_mod.strpr   = 0.5;  % structure learned priors on the CORRECT shape
+cfg_mod.strpr   = 0.7;  % structure learned priors on the CORRECT shape
 
 sim_struct = gen_sim_model2_rlvsl(cfg_tgt,cfg_mod);
 data = sim_struct.sim_struct.sim;

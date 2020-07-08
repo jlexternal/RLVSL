@@ -54,8 +54,8 @@ end
 if ~all(ismember(cfg.resp,[1,2]))
     error('Invalid responses (should be 1 or 2)!');
 end
-if ~all(cfg.rew(:) >= 0 & cfg.rew(:) <= 1)
-    error('Invalid reward values (should be in [0,1] range)!');
+if ~all(cfg.rew(:) > 0 & cfg.rew(:) < 100)
+    error('Invalid reward values (should be in [1,99] range)!');
 end
 % check optional parameters
 if ~isfield(cfg,'verbose')
@@ -63,17 +63,17 @@ if ~isfield(cfg,'verbose')
 end
 
 % get data
-resp = cfg.resp; % response (1 or 2)
+resp = cfg.resp; % response (1-correct or 2-incorrect)
 rew  = cfg.rew;  % rewards
 trl  = cfg.trl;  % trial number in current block
 stgt = cfg.stgt; % s.d. of target distribution
 
-ntrl = numel(trl); % number of trials
-nsmp = cfg.nsmp; % number of samples used by particle filter
+ntrl = numel(trl);  % number of trials
+nsmp = cfg.nsmp;    % number of samples used by particle filter
 
 % set unchosen rewards to overall mean
 indx = sub2ind([ntrl,2],(1:ntrl)',3-resp);
-rew(indx) = 0.5;
+rew(indx) = 50;
 
 % define model parameters
 pnam = {}; % name
@@ -88,7 +88,7 @@ ppub = []; % plausible upper bound
 pnam{1,1} = 'zeta';
 pmin(1,1) = 0.001;
 pmax(1,1) = 10;
-%pfun{1,1} = @(x)gampdf(x,4,0.125);  % the gamma distribution as prior is due to the non-negative parameter space
+%pfun{1,1} = @(x)gampdf(x,4,0.125); 
 pfun{1,1} = @(x)gampdf(x,2.5,0.125); % JL - testing different prior distrib.
 pini(1,1) = gamstat(4,0.125);
 pplb(1,1) = gaminv(0.15,4,0.125);
@@ -235,8 +235,8 @@ function [ll,p,e,q,z,k,v] = getll(zeta,alpha,prior,tau,ksi)
     qlt = zeros(ntrl,nsmp); % logit on Q-values
     slt = zeros(ntrl,nsmp); % logit on structure learned prior
     
-    k = zeros(ntrl,2,nsmp); % kalman gains
-    v = zeros(ntrl,2,nsmp); % covariance noise
+    k = zeros(ntrl,1); % kalman gains
+    v = zeros(ntrl,1); % covariance noise
     
     vs = stgt^2;              % sampling variance
     vn = (alpha/(1-alpha))^2; % process noise (calculated from value of asympote parameter)
@@ -244,27 +244,24 @@ function [ll,p,e,q,z,k,v] = getll(zeta,alpha,prior,tau,ksi)
     for itrl = 1:ntrl
         % 1st response of each block (uninformative)
         if trl(itrl) == 1
-            
             q(itrl,:,:) = 0.5;   % KF posterior mean
-            qlt(itrl,:) = 1e-6;
-            slt(itrl,:) = log(prior)-log(1-prior);
-            k(itrl,:,:) = 0;     % Kalman gain
-            v(itrl,:,:) = 1e6;   % Covariance noise
-            p(itrl,:)   = (1+exp(-(qlt(itrl,:)+slt(itrl,:)))).^-1; %
-            %p(itrl,:) = 0.5; %
+            qlt(itrl,:) = 1e-6;  % 'Q logit'
+            slt(itrl,:) = log(prior)-log(1-prior); % 'S logit'
+            k(itrl)     = 0;     % Kalman gain
+            v(itrl)     = 1e6;   % Covariance noise
+            p(itrl,:)   = (1+exp(-(qlt(itrl,:)+slt(itrl,:)))).^-1;
             continue
         end
         
         % 1/ update Q-values
         q(itrl,:,:) = q(itrl-1,:,:);
-        v(itrl,:,:) = v(itrl-1,:,:);
         
         for iopt = 1:2 % tracking for the two choices
-            e(itrl,iopt,:)  = rew(itrl-1,iopt)-q(itrl,iopt,:);               % prediction error
-            s(iopt,:)       = sqrt(zeta^2*e(itrl,iopt,:).^2+ksi^2);          % learning noise s.d.
-            k(itrl,:,:)     = v(itrl,:,:)./(v(itrl,:,:)+vs);                 % kalman gain update
-            q(itrl,iopt,:)  = q(itrl,iopt,:)+k(itrl,iopt,:).*e(itrl,iopt,:); % exact learning
-            v(itrl,:,:)     = (1-k(itrl,:,:)).*v(itrl,:,:)+vn;               % covariance noise update
+            e(itrl,iopt,:)  = rew(itrl-1,iopt)-q(itrl,iopt,:);             % prediction error
+            s(iopt,:)       = sqrt(zeta^2*e(itrl,iopt,:).^2+ksi^2);        % learning noise s.d.
+            k(itrl)         = v(itrl-1)/(v(itrl-1)+vs);                        % kalman gain update
+            q(itrl,iopt,:)  = q(itrl,iopt,:)+k(itrl).*e(itrl,iopt,:);      % exact learning
+            v(itrl)         = (1-k(itrl))*v(itrl-1)+vn;                    % covariance noise update
         end
         
         q0 = q(itrl,:,:); % hold exact learned q value
@@ -273,11 +270,11 @@ function [ll,p,e,q,z,k,v] = getll(zeta,alpha,prior,tau,ksi)
         qd          = reshape(q(itrl,1,:)-q(itrl,2,:),[1,nsmp]); % difference of q-values
         supd        = sqrt(sum(s.^2,1));                         % learning noise s.d. 
         ssel        = pi/sqrt(6)*tau;                            % softmax choice s.d. (argmax'ed if tau = 0)
-        sd          = sqrt(supd.^2+ssel^2);                      % s.d. of q-val difference distrib.
+        sd          = sqrt(supd.^2+ssel^2);            % s.d. from the sources of noise/variability.
         
         p(itrl,:)   = 1-normcdf(0,qd,sd);                        % probability of response from strictly RL
-        qlt(itrl,:) = log(p(itrl,:))-log(1-p(itrl,:)); %          % logit contribution of RL
-        slt(itrl,:) = log(prior)-log(1-prior);         %          % logit contribution of SL 
+        qlt(itrl,:) = log(p(itrl,:))-log(1-p(itrl,:)); %         % logit contribution of RL
+        slt(itrl,:) = log(prior)-log(1-prior);         %         % logit contribution of SL 
         
         p(itrl,:)   = (1+exp(-(qlt(itrl,:)+slt(itrl,:)))).^-1; % % integrated probability of response
 

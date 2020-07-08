@@ -1,4 +1,4 @@
-function [epoch_window,excluded_trials,fbs,qts] = pupil_epoch_window_rlvsl(subjlist,condtype,cfg)
+function [epoch_window,excluded_trials,fbs,rsp,qts,trs,bks] = pupil_epoch_window_rlvsl(subjlist,condtype,cfg)
 % pupil_epoch_window_rlvsl
 %
 % Usage: Finds the smallest epoch window around a feedback point on all trials of all
@@ -8,8 +8,8 @@ function [epoch_window,excluded_trials,fbs,qts] = pupil_epoch_window_rlvsl(subjl
 %           condtype - condition to analyze over
 %           cfg      - structure containing fields:
 %                           lim_epoch : 'STIM' or 'END'
-%                                       % STIM : nt-1 trials analyzed
-%                                       % END  : all nt trials analyzed
+%                                      % STIM : nt-1 trials analyzed
+%                                      % END  : all nt trials analyzed
 %                           min_prefb : minimum sampling points a trial must have before fb
 %                                       to be considered
 %
@@ -51,11 +51,15 @@ for isubj = subjlist
             nt = nt-1; % if the right limit is the next stimulus, only consider the first nt-1 trials
             incr_right = incr_right+1;
         end
+        % set constants and allocate memory
         nb = length(expe);
         excluded_trials  = false(nt,(nb-3)/3,numel(subjlist)); % logical matrix of excluded trials
         fbs = nan(nt,(nb-3)/3,numel(subjlist)); % matrix of feedback values
-        qts = nan(size(fbs));
-        idx_fb = 3+4*(0:nt-1); % indices of feedback given it is the 3rd out of every 4 events
+        rsp = nan(size(fbs));   % subject responses
+        qts = nan(size(fbs));   % matrix of quarters
+        mgen = expe(1).cfg.mgen; % generative mean
+        sgen = expe(1).cfg.sgen; % generative std
+        idx_fb = 3+4*(0:nt-1);  % indices of feedback given it is the 3rd out of every 4 events
         subj_init = false;
     end
     
@@ -74,8 +78,10 @@ for isubj = subjlist
                 i_fb = idx_fb(it);
                 diffs(1,it) = abs(tmsg(i_fb) - tmsg(i_fb-2));          % |FBCK1 - STIM1| 
                 diffs(2,it) = abs(tmsg(i_fb) - tmsg(i_fb+incr_right)); % |FBCK1 - successive event (END1 or STIM2)|  
-                fbs(it,ctr_blck,ctr_subj) = expe(ib).blck_trn(it);
+                fbs(it,ctr_blck,ctr_subj) = convert_fb_raw2seen(expe(ib).blck(it),expe(ib).resp(it),mgen,sgen); % requires function in path
+                rsp(it,ctr_blck,ctr_subj) = expe(ib).resp(it);
                 qts(it,ctr_blck,ctr_subj) = floor((expe(ib).sesh-1)/2)+1;
+                
                 % Exclude trials where the subject responded too fast and would not
                 % have seen the stimulus i.e. the time between the feedback and
                 % stimulus is much too short for a true reaction to have happened
@@ -92,6 +98,11 @@ for isubj = subjlist
         end
     end
 end
+
+% output trial and block indices
+trs = repmat((1:nt)',[1 (nb-3)/3 numel(subjlist)]);
+bks = repmat((1:(nb-3)/3),[nt 1 numel(subjlist)]);
+
 %fprintf('%d trials counted as excluded from analysis\n',ctr_excl);
 %fprintf('%d trials indicated as excluded in output exclusion matrix\n',sum(sum(sum(excluded_trials))));
 if ctr_excl ~= sum(sum(sum(excluded_trials)))

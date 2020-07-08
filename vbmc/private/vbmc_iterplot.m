@@ -17,7 +17,11 @@ if D == 1
     drawnow;
 
 else
-    Xrnd = vbmc_rnd(vp,1e5,1,1);
+    if ~isempty(vp)
+        Xrnd = vbmc_rnd(vp,1e5,1,1);
+    else
+        Xrnd = gp.X;
+    end
     X_train = gp.X;
     
     if iter == 1
@@ -30,7 +34,7 @@ else
     end
     idx_old = ~idx_new;
 
-    if ~isempty(vp.trinfo); X_train = warpvars(X_train,'inv',vp.trinfo); end
+    if ~isempty(vp.trinfo); X_train = warpvars_vbmc(X_train,'inv',vp.trinfo); end
     
     Pdelta = optimState.PUB_orig - optimState.PLB_orig;
     X_min = min(X_train,[],1) - Pdelta*0.1;

@@ -4,6 +4,7 @@ clear all
 close all
 clc
 
+addpath('./Toolboxes');
 % add VBMC toolbox to path
 addpath('./vbmc');
 
@@ -108,7 +109,6 @@ for isubj = 1:nsubj
         
         rew = nan(size(resp,1),2); % rewards of chosen & unchosen options
         for i = 1:size(resp,1) % pointers on blk and trl
-            
             rew(i,resp(i))   = cond_struct(icond).outcome(blk(i),trl(i),isubj)/100; % chosen
             rew(i,3-resp(i)) = 1-rew(i,resp(i));                                    % unchosen
         end
@@ -118,7 +118,7 @@ for isubj = 1:nsubj
         cfg.icond   = icond; % condition type
         cfg.nsmp    = 1e3;   % number of samples
         cfg.verbose = true;  % verbose VBMC output
-        cfg.stgt    = sig_opti/100;
+        cfg.stgt    = sqrt(sig_opti^2*.01^2);
         %cfg.prior = .5; %test
         
         % fixed parameters
@@ -152,18 +152,15 @@ for isubj = 1:nsubj
             cfg.rew     = qrew;
             cfg.trl     = qtrl;
             
-%           out_fit{isubj}.cond(icond).quarter(iq).fit = fit_noisyRL(cfg);
             out_fit{isubj}.cond(icond).quarter(iq).fit = fit_RLpSL2_rlvsl(cfg);
             
             rz = out_fit{isubj}.cond(icond).quarter(iq).fit.zeta;
             ra = out_fit{isubj}.cond(icond).quarter(iq).fit.alpha;
-            rp = out_fit{isubj}.cond(icond).quarter(iq).fit.priorpar;
+            rp = out_fit{isubj}.cond(icond).quarter(iq).fit.prior;
             fprintf('Found params: zeta: %.2f, alpha: %.2f, prior: %.2f\n',rz,ra,rp);
             
         end
-        
     end
-    
 end
 
 %% Visualize parameters
@@ -175,22 +172,19 @@ zetas  = zeros(ncond,nquar,nsubj);
 alphas = zeros(ncond,nquar,nsubj);
 priors = zeros(ncond,nquar,nsubj);
 
-
 for isubj = 1:nsubj
-    for icond = 1:ncond
+    for icond = 3
         for iquar = 1:nquar
             zetas(icond,iquar,isubj)  = out_fit{isubj}.cond(icond).quarter(iquar).fit.zeta;
             alphas(icond,iquar,isubj) = out_fit{isubj}.cond(icond).quarter(iquar).fit.alpha;
             priors(icond,iquar,isubj) = out_fit{isubj}.cond(icond).quarter(iquar).fit.prior;
         end
     end
-    
 end
 
 %% priors over time
 close all;
-clf;
-for icond = 1:3
+for icond = 3
     figure(icond);
     hold on;
     for iquar = 1:nquar
@@ -219,7 +213,7 @@ for icond = 1:3
     hold off;
 end
 %% zetas over time
-for icond = 1:ncond
+for icond = 3
     figure(icond+3);
     hold on;
     for iquar = 1:nquar

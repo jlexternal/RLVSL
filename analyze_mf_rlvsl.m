@@ -2,7 +2,8 @@
 %
 clear all;
 close all;
-
+addpath('./Toolboxes');
+condtypes = ["Repeating","Alternating","Random"];
 %% Load data
 ifig = 1;
 nsubjtot    = 31;
@@ -78,17 +79,16 @@ for isubj = subjlist
         
         resps(ib_c(ic),:,ic,isubj) = -(expe(ib).resp-2);
         
-        % Labeling trials as consistent or inconsistent based on below
+        % Labeling trials with decisions consistent or inconsistent with previous evidence based on below
         % if fb > 0 & resp ==1 || fb < 0 & resp == 0
         %   consistent 
         % if fb < 0 & resp ==1 || fb > 0 & resp == 0
         %   inconsistent
         for it = 2:nt
-            if (blcks(ib_c(ic),it-1,ic,isubj) >= 50 && resps(ib_c(ic),it,ic,isubj) == 1) || ...
-               (blcks(ib_c(ic),it-1,ic,isubj) < 50 && resps(ib_c(ic),it,ic,isubj) == 0)
+            if (resps(ib_c(ic),it-1,ic,isubj) == 1 && blcks(ib_c(ic),it-1,ic,isubj) >= 50 && resps(ib_c(ic),it,ic,isubj) == 1) || ...
+               (resps(ib_c(ic),it-1,ic,isubj) == 0 && blcks(ib_c(ic),it-1,ic,isubj) < 50 && resps(ib_c(ic),it,ic,isubj) == 1)
                 cons_regime(ib_c(ic),it,ic,isubj) = 1;
-            elseif (blcks(ib_c(ic),it-1,ic,isubj) < 50 && resps(ib_c(ic),it,ic,isubj) == 1) || ...
-                   (blcks(ib_c(ic),it-1,ic,isubj) >= 50 && resps(ib_c(ic),it,ic,isubj) == 0)
+            else
                 cons_regime(ib_c(ic),it,ic,isubj) = 2;
             end
         end
@@ -180,13 +180,14 @@ rts_con = nan(nb_c,nt-1,3,numel(subjlist));
 rts_inc = nan(nb_c,nt-1,3,numel(subjlist));
 mean_rts_con = nan(1,1,3,numel(subjlist));
 mean_rts_inc = nan(1,1,3,numel(subjlist));
-for ic = 1:3
+for ic = 1:3 % by condition
     for isubj = subjlist
         rts_con(:,:,ic,isubj) = double(bsxfun(@eq,cons_regime(:,2:end,ic,isubj),1)).*rts(:,2:end,ic,isubj);
         rts_inc(:,:,ic,isubj) = double(bsxfun(@eq,cons_regime(:,2:end,ic,isubj),2)).*rts(:,2:end,ic,isubj);
     end
     rts_con(rts_con==0)     = NaN;
     rts_inc(rts_inc==0)     = NaN;
+    
     mean_rts_con(:,:,ic,:)  = mean(mean(rts_con(:,:,ic,subjlist),'omitnan'),'omitnan');
     mean_rts_inc(:,:,ic,:)  = mean(mean(rts_inc(:,:,ic,subjlist),'omitnan'),'omitnan');
 end
@@ -195,17 +196,26 @@ end
 
 figure(ifig);
 ifig = ifig + 1;
-clf;
-hold on;
-for ic = 1:3
+for ic = 3
     subplot(1,3,ic);
     for iq = 1:4
-        plot(1:nt,quarterly_acc_mean(iq,:,ic),'LineWidth',2,'Color', graded_rgb(ic,iq,4));
-        shadedErrorBar(1:nt,quarterly_acc_mean(iq,:,ic),quarterly_acc_sem(iq,:,ic),'lineprops',{'Color',graded_rgb(ic,iq,4)});
-        ylim([.2 1]);
+        shadedErrorBar(1:nt,quarterly_acc_mean(iq,:,ic),quarterly_acc_sem(iq,:,ic),'lineprops',{'LineWidth',2,'Color',graded_rgb(ic,iq,4)});
         hold on;
+        shadedErrorBar(1:16,mean(mean(c,1),3),std(mean(c,1),1,3)/sqrt(ns),'lineprops',{'LineWidth',2,'Color',[.7 0 0]},'patchSaturation',0.075);
+        ylim([.2 1]);
     end
+    title(sprintf('Condition: %s',condtypes(ic)));
+    leg_txt = ["Q1","Q2","Q3","Q4"];
+    %legend(leg_txt,'Location','southeast');
+    if ic == 1
+        ylabel('Proportion correct');
+    elseif ic == 2
+        xlabel('Trial number');
+    end
+    ylim([.3 1]);
+    yline(.5,':','LineWidth',1.5,'HandleVisibility','off');
 end
+sgtitle(sprintf('Participant Performance\nShaded area: SEM'));
 hold off;
 
 %% Plot: Mean block trajectories by condition by quarter
@@ -213,17 +223,28 @@ figure(ifig);
 ifig = ifig + 1;
 clf;
 hold on;
-for ic = 1:3
-    for iq = 1:4
+visHandle = 'off';
+for iq = 1:4
+    for ic = 1:3
         subplot(1,4,iq);
-        plot(1:nt,quarterly_acc_mean(iq,:,ic),'LineWidth',2,'Color', graded_rgb(ic,iq,4));
-        shadedErrorBar(1:nt,quarterly_acc_mean(iq,:,ic),quarterly_acc_sem(iq,:,ic),'lineprops',{'Color',graded_rgb(ic,iq,4)});
-        yline(mean(quarterly_acc_mean(iq,:,ic)),'Color',graded_rgb(ic,4,4));
-        ylim([.2 1]);
-        title(sprintf('Quarter %d\nResponse accuracy',iq));
+        shadedErrorBar(1:nt,quarterly_acc_mean(iq,:,ic),quarterly_acc_sem(iq,:,ic),...
+                        'lineprops',{'LineWidth',2,'Color',graded_rgb(ic,iq,4),'HandleVisibility',visHandle});
+        yline(mean(quarterly_acc_mean(iq,:,ic)),'Color',graded_rgb(ic,4,4),'HandleVisibility','off');
+        title(sprintf('Quarter %d',iq));
         hold on;
     end
+    if iq == 1
+        ylabel('Proportion correct');
+        xlabel('Trial number');
+    elseif iq == 3
+        visHandle = 'on';
+    elseif iq == 4
+        legend(condtypes,'Location','southeast');
+    end
+    ylim([.3 1]);
+    yline(.5,':','LineWidth',1.5,'HandleVisibility','off');
 end
+sgtitle(sprintf('Participant Performance\nShaded area: SEM'));
 hold off;
 
 %% Plot: Mean trial RT trajectories by quarters by condition
@@ -259,12 +280,32 @@ for ic = 1:3
 end
 hold off;
 
-%% Plot: Ensure distribution of differences between consequent feedback values are i.i.d.
+%% Plot: Ensure distribution of rewards seen in each condition
+figure(ifig);
+ifig = ifig + 1;
+for ic = 1:3
+    subplot(3,1,ic);
+    h = histogram(blcks(:,2:end,ic,subjlist),'BinLimits',[0 100],'BinMethod','integers')
+    hold on;
+    xline(mean(blcks(:,2:end,ic,subjlist),'all'),'LineWidth',2);
+    text(mean(blcks(:,2:end,ic,subjlist),'all')+5,max(h.BinCounts),num2str(mean(blcks(:,2:end,ic,subjlist),'all')));
+    if ic == 1
+        title('Distribution of feedback values seen by participants across conditions');
+        xlabel('rep');
+    elseif ic == 2
+        xlabel('alt');
+    else
+        xlabel('rnd');
+    end
+end
+
+%% Plot: Check distribution of differences between consequent feedback values are i.i.d.
 figure(ifig);
 ifig = ifig + 1;
 for ic = 1:3
     subplot(3,1,ic);
     histogram(blck_diffs(:,2:end,ic,subjlist),'BinLimits',[-36,36],'BinMethod','integers')
+    hold on;
     if ic == 1
         title('Distribution of feedback value differences across conditions');
         xlabel('rep');
@@ -372,66 +413,106 @@ title(sprintf('RT means over Consistent and Inconsistent feedback values'));
 xlim([0 3]);
 hold off;
 
-%% Plot: RTs over consistent and inconsistent feedback (by condition)
+%% Plot: RTs over consistent and inconsistent choices from previous feedback (by condition)
 
-consis_rts_rep = mean(mean_rts_con(:,:,1,:),3);
-consis_rts_alt = mean(mean_rts_con(:,:,2,:),3);
-incons_rts_rep = mean(mean_rts_inc(:,:,1,:),3);
-incons_rts_alt = mean(mean_rts_inc(:,:,2,:),3);
+consis_rts_rep = squeeze(mean(mean_rts_con(:,:,1,:),3));
+consis_rts_alt = squeeze(mean(mean_rts_con(:,:,2,:),3));
+consis_rts_rnd = squeeze(mean(mean_rts_con(:,:,3,:),3));
+incons_rts_rep = squeeze(mean(mean_rts_inc(:,:,1,:),3));
+incons_rts_alt = squeeze(mean(mean_rts_inc(:,:,2,:),3));
+incons_rts_rnd = squeeze(mean(mean_rts_inc(:,:,3,:),3));
 
 figure(ifig);
 ifig = ifig + 1;
 hold on;
-fig = scatter(.5*ones(1,numel(subjlist)),consis_rts_rep,'s');
+% repeating
+fig = scatter(.5*ones(1,numel(subjlist)),consis_rts_rep,50);
 fig.MarkerEdgeAlpha = 0.2;
-figcolor = [1 0 0];
+for isubj = 1:nsubj
+    line([.5 1],[consis_rts_rep,incons_rts_rep],'Color',[.8 .8 .8]);
+end
+figcolor = [.8 .2 .2];
 fig.MarkerEdgeColor = figcolor;
-fig = scatter(1*ones(1,numel(subjlist)),incons_rts_rep,'d');
+fig = scatter(1*ones(1,numel(subjlist)),incons_rts_rep,50,'x');
 fig.MarkerEdgeAlpha = 0.2;
-fig.MarkerEdgeColor = figcolor;
 consis_rt_rep = mean(consis_rts_rep);
 incons_rt_rep = mean(incons_rts_rep);
-scatter(.5,consis_rt_rep,'d','filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
+scatter(.5,consis_rt_rep,50,'filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
 errorbar(.5,consis_rt_rep,std(consis_rts_rep)/sqrt(numel(subjlist)),'Color',figcolor);
-scatter(1,incons_rt_rep,'x','filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
+scatter(1,incons_rt_rep,50,'x','filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
 errorbar(1,incons_rt_rep,std(incons_rts_rep)/sqrt(numel(subjlist)),'Color',figcolor);
 
-fig = scatter(1.5*ones(1,numel(subjlist)),consis_rts_alt,'s');
+% alternating
+fig = scatter(1.5*ones(1,numel(subjlist)),consis_rts_alt,50);
 fig.MarkerEdgeAlpha = 0.2;
+for isubj = 1:nsubj
+    line([1.5 2],[consis_rts_alt,incons_rts_alt],'Color',[.8 .8 .8]);
+end
 figcolor = [.2 .8 .2];
 fig.MarkerEdgeColor = figcolor;
-fig = scatter(2*ones(1,numel(subjlist)),incons_rts_alt,'d');
+fig = scatter(2*ones(1,numel(subjlist)),incons_rts_alt,50,'x');
 fig.MarkerEdgeAlpha = 0.2;
 fig.MarkerEdgeColor = figcolor;
 consis_rt_alt = mean(consis_rts_alt);
 incons_rt_alt = mean(incons_rts_alt);
-scatter(1.5,consis_rt_alt,'d','filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
+scatter(1.5,consis_rt_alt,50,'filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
 errorbar(1.5,consis_rt_alt,std(consis_rts_alt)/sqrt(numel(subjlist)),'Color',figcolor);
-scatter(2,incons_rt_alt,'x','filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
+scatter(2,incons_rt_alt,50,'x','filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
 errorbar(2,incons_rt_alt,std(incons_rts_alt)/sqrt(numel(subjlist)),'Color',figcolor);
 
+% random
+fig = scatter(2.5*ones(1,numel(subjlist)),consis_rts_rnd,50);
+fig.MarkerEdgeAlpha = 0.2;
+for isubj = 1:nsubj
+    line([2.5 3],[consis_rts_rnd,incons_rts_rnd],'Color',[.8 .8 .8]);
+end
+figcolor = [.2 .2 .8];
+fig.MarkerEdgeColor = figcolor;
+fig = scatter(3*ones(1,numel(subjlist)),incons_rts_rnd,50,'x');
+fig.MarkerEdgeAlpha = 0.2;
+fig.MarkerEdgeColor = figcolor;
+consis_rt_rnd = mean(consis_rts_rnd);
+incons_rt_rnd = mean(incons_rts_rnd);
+scatter(2.5,consis_rt_rnd,50,'filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
+errorbar(2.5,consis_rt_rnd,std(consis_rts_rnd)/sqrt(numel(subjlist)),'Color',figcolor);
+scatter(3,incons_rt_rnd,50,'x','filled','MarkerEdgeColor',figcolor,'MarkerFaceColor',figcolor);
+errorbar(3,incons_rt_rnd,std(incons_rts_rnd)/sqrt(numel(subjlist)),'Color',figcolor);
+
+% stats: repeating
 [~,p] = ttest(consis_rts_rep,incons_rts_rep);
 sigloc = max(consis_rt_rep, incons_rt_rep);
 sigloc = sigloc+sigloc/10;
 sigline = line([.5 1], [sigloc sigloc]);
 set(sigline,'Color','k');
 text(.75,sigloc+sigloc/20,sigstar(p),'FontSize',10,'HorizontalAlignment','center');
-
+% stats: alternating
 [~,p] = ttest(consis_rts_alt,incons_rts_alt);
 sigloc = max(consis_rt_alt, incons_rt_alt);
 sigloc = sigloc+sigloc/10;
 sigline = line([1.5 2], [sigloc sigloc]);
 set(sigline,'Color','k');
-text(1.75,sigloc+sigloc/20,sigstar(p),'FontSize',20,'HorizontalAlignment','center');
+text(1.75,sigloc+sigloc/20,sigstar(p),'FontSize',10,'HorizontalAlignment','center');
+% stats: random
+[~,p] = ttest(consis_rts_rnd,incons_rts_rnd);
+sigloc = max(consis_rt_rnd, incons_rt_rnd);
+sigloc = sigloc+sigloc/10;
+sigline = line([2.5 3], [sigloc sigloc]);
+set(sigline,'Color','k');
+text(2.75,sigloc+sigloc/20,sigstar(p),'FontSize',20,'HorizontalAlignment','center');
 
-xticks([.5 1 1.5 2]);
-xticklabels({'Cons. fb (rep)','Inc. fb (rep)', 'Cons. fb (alt)','Inc. fb (alt)'});
-ylabel('RT (s)');
-title(sprintf('RT means over Consistent and Inconsistent feedback values within conditions'));
-xlim([0 2.5]);
+xticks([.5 1 1.5 2 2.5 3]);
+xticklabels({'Cons. (rep)','Incons. (rep)', 'Cons. (alt)','Incons. (alt)', 'Cons. (rnd)','Incons. (rnd)'});
+set(gca,'FontSize',14)
+ylabel('Reaction time (s)');
+sgtitle(sprintf('Reaction times on choices consistent/inconsistent \nwith feedback and choice from previous trial'));
+xlim([0 3.5]);
 hold off;
 
 %% Plot: RTs over confirmatory vs disconfirmatory evidence (of the previous choice)
+% Confirmatory positive: last fb was positive, current fb was positive
+% Confirmatory negative: last fb was negative, current fb was negative
+% Disconfirmatory: current fb changed signs
+
 confirm_pos_rts = mean(mean_rts_pos_reg,3);
 confirm_neg_rts = mean(mean_rts_neg_reg,3);
 disconf_rts     = mean([mean(mean_rts_diff_inc,3) mean(mean_rts_diff_dec,3)],2);
@@ -513,7 +594,3 @@ function stars = sigstar(p)
         stars = 'n.s.';
     end
 end
-
-
-
-

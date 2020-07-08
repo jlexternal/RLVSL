@@ -24,6 +24,12 @@ function [X,I] = vbmc_rnd(vp,N,origflag,balanceflag,df)
 %   element of I indicates the index of the variational mixture component 
 %   from which the n-th row of X has been generated.
 %
+%   X = VBMC_RND(VP,N,ORIGFLAG,'gp') generates random samples using the 
+%   Gaussian process the variational posterior has been fit to. This 
+%   approach is much slower than sampling from the variational posterior, 
+%   as samples are generated via Markov Chain Monte Carlo, but it can 
+%   occasionally be more precise.
+%
 %   See also VBMC, VBMC_MOMENTS, VBMC_PDF.
 
 if nargin < 3 || isempty(origflag); origflag = true; end
@@ -36,6 +42,11 @@ K = vp.K;   % Number of components
 if N < 1
     X = zeros(0,D);
     I = zeros(0,1);
+elseif ischar(balanceflag) && strcmpi(balanceflag,'gp')
+    if ~isfield(vp,'gp') || isempty(vp.gp)
+        error('Cannot sample from GP, the GP associated to the variational posterior is empty.');
+    end    
+    X = gpsample_vbmc(vp,vp.gp,N,origflag);    
 else
     w = vp.w;                       % Mixture weights
     mu_t(:,:) = vp.mu';             % MU transposed
@@ -90,7 +101,7 @@ else
 
     if origflag && ~isempty(vp.trinfo)
         % Convert generated points back to original space
-        X = warpvars(X,'inv',vp.trinfo);
+        X = warpvars_vbmc(X,'inv',vp.trinfo);
     end
 end
 
@@ -100,8 +111,25 @@ end
 function x = catrnd(p,n)
 %CATRND Sample from categorical distribution.
 
+maxel = 1e6;
+Nel = n*numel(p);
+stride = ceil(maxel/numel(p));
+
 cdf(1,:) = cumsum(p);
 u = rand(n,1)*cdf(end);
-x = sum(bsxfun(@lt, cdf, u),2) + 1;
+
+% Split for memory reasons
+if Nel <= maxel
+    x = sum(bsxfun(@lt, cdf, u),2) + 1;
+else
+    x = zeros(n,1);
+    idx_min = 1;
+    while idx_min <= n
+        idx_max = min(idx_min+stride-1,n);
+        idx = idx_min:idx_max;
+        x(idx) = sum(bsxfun(@lt, cdf, u(idx)),2) + 1;
+        idx_min = idx_max+1;
+    end
+end
 
 end
