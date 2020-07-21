@@ -5,6 +5,7 @@
 
 clear all;
 addpath('./Toolboxes/'); % add path containing ANOVA function
+%%
 
 % subjects to be included in analysis
 nsubjtot    = 31;
@@ -24,6 +25,7 @@ if usecfg
     cfg = struct;
     %cfg.polyorder = 20; % default is nt
     cfg.r_ep_lim = 4; % set the rightward limit of epoch window (in seconds)
+    cfg.incl_nan = false;
 end
 
 for icond = 1:nc
@@ -702,7 +704,8 @@ idx_bias = zeros(size(qts));
 bvals = zeros(nsubj,size(epochs,2),2); %(isubj,epoch,ibias)
 err_bar = zeros(icond,size(bvals,2),2);
 epoch_means = nan(nsubj,sum(epc_range)+1,2);
-    
+
+epochs_test = epochs;
 % Subject-level mean analysis
 for isubj = 1:nsubj
     ind_subj = idx_subj == isubj; % identify which epochs to analyze for the subject
@@ -727,6 +730,7 @@ for isubj = 1:nsubj
     for biased = 1:2 % 1:unbiased, 2:biased
         qts_biased = biased-1;
         n_eps = size(epochs(ind_subj & idx_bias==qts_biased,:),1);
+        disp(sum(fbs(ind_subj & idx_bias==qts_biased)))
         for isamp = 1:size(epochs,2)
             bval = regress(epochs(ind_subj & idx_bias==qts_biased,isamp),[ones(n_eps,1) fbs(ind_subj & idx_bias==qts_biased)]);
             % Note: Rank deficient warnings come from subjects who do not make biased decisions
@@ -734,6 +738,18 @@ for isubj = 1:nsubj
         end
         
         epoch_means(isubj,:,biased) = mean(epochs(ind_subj & idx_bias==qts_biased,:),1);
+        
+        %{
+        %testing
+        xaxis = ((1:size(bvals,2))-epoch_window(1))*2/1000;
+        clf;
+        for i = 1:2
+            shadedErrorBar(xaxis,mean(bvals(isubj,:,i),1,'omitnan'),std(bvals(isubj,:,i),0,1,'omitnan'),...
+                'lineprops',{'LineWidth',2},'patchSaturation',0.075);
+            hold on;
+        end
+        pause;
+        %}
     end
 end
 % Account for subjects that are never biased
@@ -757,22 +773,28 @@ xaxis = ((1:size(bvals,2))-epoch_window(1))*2/1000;
 ifig = ifig+1;
 figure(ifig);
 for ibias = 1:2
+    figure(1)
     shadedErrorBar(xaxis,mean(bvals(:,:,ibias),1,'omitnan'),err_bar(icond,:,ibias),'lineprops',{'LineWidth',2},'patchSaturation',0.075);
     hold on;
+    shade_str = 'SEM';
+    legtxt = {'unbiased','biased'};
+    ylabel('Regression Beta');
+    figure(2);
+    shadedErrorBar(xaxis,mean(epoch_means(:,:,ibias),1,'omitnan'),std(epoch_means(:,:,ibias),0,1,'omitnan')/sqrt(nsubj_temp),'lineprops',{'LineWidth',2},'patchSaturation',0.075);
+    shade_str = 'SEM';
+    legtxt = {'unbiased','biased'};
+    ylabel('Z-score');
 end
-shade_str = 'SEM';
-legtxt = {'unbiased','biased'};
-legend([legtxt],'Location','southwest');
-xline(0,'LineWidth',2,'HandleVisibility','off');
-xlabel('Time around fb onset (s)');
-yline(0,'HandleVisibility','off');
-yline(.5,':','HandleVisibility','off');
-yline(-.5,':','HandleVisibility','off');
-yline(1,':','HandleVisibility','off');
-yline(-1,':','HandleVisibility','off');
-ylabel('Regression Beta');
-xlim([min(xaxis) max(xaxis)]);
-ylim([-2.5 1.1]);
+
+for i =1:2
+    figure(i)
+    legend([legtxt],'Location','southwest');
+    xline(0,'LineWidth',2,'HandleVisibility','off');
+    xlabel('Time around fb onset (s)');
+    yline(0,'HandleVisibility','off');
+    xlim([min(xaxis) max(xaxis)]);
+end
+
 
 %% Plot: Pupil dilation grouped in to pos and neg feedback
 

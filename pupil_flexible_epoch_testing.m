@@ -1,5 +1,6 @@
 %pupil_flexible_epoch_testing
 clear all;
+addpath('./Toolboxes/NoiseTools');
 
 nsubjtot    = 31;
 excluded    = [1 23 28];
@@ -9,7 +10,6 @@ nsubj = numel(subjlist);
 % Script parameters
 % Choose locking event(1/STIM 2/RESP 3/FBCK 4/END, trial number)
 ievent = 3;
-
 
 %% Organize data
 epoch_struct = {};
@@ -85,7 +85,7 @@ for isubj = subjlist
         ind_nan = ind_nan | isnan(psmp);
 
         % Detrend data with Robust Detrending (of Alain de Cheveigné)
-        polyorder = nt;
+        polyorder = nt-1;
         pupil_detrend_rbst = nan(size(psmp));
         [fit_psmp_dtd_rbst,~,~] = nt_detrend(psmp(~ind_nan),polyorder);
         iptr  = 1;
@@ -99,18 +99,19 @@ for isubj = subjlist
         
         for it = 1:nt
             % Choose the window
-            imsg_pre  = imsg(idx_event(ievent+(it-1)),ib-3,subj_ctr)-ep_pre;
-            imsg_post = imsg(idx_event(ievent+(it-1)),ib-3,subj_ctr)+ep_post;
+            imsg_pre  = imsg(idx_event(ievent,it),ib-3,subj_ctr)-ep_pre;
+            imsg_post = imsg(idx_event(ievent,it),ib-3,subj_ctr)+ep_post;
             epoch_struct{ib-3,it,subj_ctr} = pupil_detrend_rbst(imsg_pre:imsg_post);
             
             % Keep track of temporal differences to future events
             if it < nt
                 for ie = 1:4
-                    td_from_onset_post(ib-3,it,subj_ctr,ie) = imsg(idx_event(ievent+(it-1))+ie,ib-3,subj_ctr) - imsg(idx_event(ievent+(it-1)),ib-3,subj_ctr);
+                    td_from_onset_post(ib-3,it,subj_ctr,ie) = imsg(idx_event(ievent,it)+ie,ib-3,subj_ctr) - imsg(idx_event(ievent,it),ib-3,subj_ctr);
                 end
             end
         end
     end
+    
 end
 
 % Get average times of post locked-event events
@@ -132,7 +133,7 @@ baselined = false;  % baseline each epoch to before the fb onset
 
 bvals = zeros(nsubj,n_samp,2); %(isubj,epoch,ibias)
 epoch_means_subj = zeros(nsubj,n_samp);
-
+epochs_test = [];
 for isubj = 1:nsubj
     
     epochs = nan(nt*(nb-3),n_samp);
@@ -164,6 +165,7 @@ for isubj = 1:nsubj
     cds = cds(:);
     % Remove data corresponding to NaN pupil
     epochs(nan_epoch,:) = [];
+    epochs_test = cat(1,epochs_test,epochs);
     fbs(nan_epoch,:) = [];
     sjs(nan_epoch,:) = [];
     rsp(nan_epoch,:) = [];
