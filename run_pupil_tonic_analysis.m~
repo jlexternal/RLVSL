@@ -5,7 +5,7 @@
 
 clear all;
 addpath('./Toolboxes/'); % add path containing ANOVA function
-%% Epoch raw data and detrend
+%%
 
 % subjects to be included in analysis
 nsubjtot    = 31;
@@ -25,25 +25,23 @@ if usecfg
     cfg = struct;
     %cfg.polyorder = 20; % default is nt
     cfg.r_ep_lim = 4; % set the rightward limit of epoch window (in seconds)
-    cfg.incl_nan = true;
-    cfg.isdetrend = false;
-    cfg.iszscored = true;
+    cfg.incl_nan = false;
 end
 
-if usecfg
-    epc_struct = pupil_get_epochs(subjlist,cfg);
-else
-    epc_struct = pupil_get_epochs(subjlist);
+for icond = 1:nc
+    if usecfg
+        epc_struct{icond} = pupil_get_epochs(subjlist,condtypes{icond},cfg);
+    else
+        epc_struct{icond} = pupil_get_epochs(subjlist,condtypes{icond});
+    end
 end
-
 
 % choose the smallest epoch window for comparison
-epc_range    = min([epc_struct.epoch_window],[],1);
-epc_fb_onset = epc_struct.epoch_window(1) +1;
+epc_range    = min([epc_struct{1}.epoch_window; epc_struct{2}.epoch_window; epc_struct{3}.epoch_window],[],1);
+epc_fb_onset = [epc_struct{1}.epoch_window(1); epc_struct{2}.epoch_window(1); epc_struct{3}.epoch_window(1)]+1;
 
 ifig = 0;
 
-%%
 
 %% Local functions
 function rgb = graded_rgb(ic,iq,nq)

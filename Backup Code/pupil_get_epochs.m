@@ -1,10 +1,13 @@
-function [out] = pupil_get_epochs(subjlist,cfg)
+function [out] = pupil_get_epochs(subjlist,condtype,cfg)
 % pupil_get_epochs
+%
+% Outdated version since 21 July 2020 - JL
 %
 % Usage: Organizes and detrends preprocessed pupil data into epochs for all included 
 %           subjects to be analyzed for experiment RLVSL.
 %
 % Input:        subjlist - array of subjects to be included in analysis
+%               condtype - experimental condition
 %               setrange - hardcoded right epoch window limit (seconds)
 %               cfg      - structure containing fields:
 %    (optional)             lim_epoch : right-most limit of an epoch (STIM or END)
@@ -12,8 +15,7 @@ function [out] = pupil_get_epochs(subjlist,cfg)
 %                                        feedback onset      
 %    (optional)             incl_nan  : option to include epochs where NaN were found
 %    (optional)             polyorder : order of polynomial for detrending algorithm
-%    (optional)             isdetrend : flag for detrending the pupil data
-%    (optional)             iszscored : z-score the pupil data within given subject
+%    (required)             isdetrend : flag for detrending the pupil data
 %
 % Output: out - structure containing fields:
 %                   fbs      : feedback values
@@ -23,7 +25,7 @@ function [out] = pupil_get_epochs(subjlist,cfg)
 %                   
 % Jun Seok Lee <jlexternal@gmail.com>
 
-if nargin < 2
+if nargin < 3
     cfg = [];
 end
 if nargin < 2
@@ -42,17 +44,14 @@ if ~isfield(cfg,'lim_epoch')
     cfg.lim_epoch = 'STIM';
 end
 if ~isfield(cfg,'isdetrend')
-    cfg.isdetrend = true;
-end
-if ~isfield(cfg,'iszscored')
-    cfg.iszscored = false;
+    error('Indicate whether to detrend or not the epochs');
 end
 
 % Add robust detrending toolbox path
 addpath('./Toolboxes/NoiseTools/');
 
 % Find the epoch window that fits all subjects
-[epoch_window,excluded_trials,fbs,rsp,qts,trs,bks,cds] = pupil_epoch_window_rlvsl(subjlist,cfg);
+[epoch_window,excluded_trials,fbs,rsp,qts,trs,bks] = pupil_epoch_window_rlvsl(subjlist,condtype,cfg);
 
 if cfg.r_ep_lim ~= 0 
     epoch_window(2) = cfg.r_ep_lim*500; % 500 samples per second
@@ -78,33 +77,29 @@ for isubj = subjlist
     
     ctr_blck = 0;
     for ib = 1:length(expe)
-        if strcmpi(expe(ib).type,'training')
-            continue
-        end
-        ctr_blck = ctr_blck+1;
+        if strcmpi(expe(ib).type,condtype)
+            ctr_blck = ctr_blck+1;
+            
+            % Load the pupil data
+            pupilfile = dir(sprintf('./Data/S%02d/RLVSL_S%02d_b%02d*preproc.mat',isubj,isubj,ib));
+            load(sprintf('./Data/S%02d/%s',isubj,pupilfile.name)); % loads structure 'data_eye' to workspace
+            tsmp = data_eye.tsmp;
+            psmp = data_eye.psmp;
+            tmsg = data_eye.tmsg;
+            
+            % Normalize the time sample points
+            t_init = tsmp(1);
+            tsmp_normd = (tsmp-t_init)/1000;
 
-        % Load the pupil data
-        pupilfile = dir(sprintf('./Data/S%02d/RLVSL_S%02d_b%02d*preproc.mat',isubj,isubj,ib));
-        load(sprintf('./Data/S%02d/%s',isubj,pupilfile.name)); % loads structure 'data_eye' to workspace
-        tsmp = data_eye.tsmp;
-        psmp = data_eye.psmp;
-        tmsg = data_eye.tmsg;
+            % Identify NaN in data
+            ind_nan = isnan(tsmp_normd);
+            ind_nan = ind_nan | isnan(psmp);
 
-        % Normalize the time sample points
-        t_init = tsmp(1);
-        tsmp_normd = (tsmp-t_init)/1000;
-
-        % Identify NaN in data
-        ind_nan = isnan(tsmp_normd);
-        ind_nan = ind_nan | isnan(psmp);
-
-        % Detrend the data
-        if cfg.isdetrend
+          % Detrend the data
             % Detrend data with Robust Detrending (of Alain de Cheveigné)
             pupil_detrend_rbst = nan(size(psmp));
             [fit_psmp_dtd_rbst,~,~] = nt_detrend(psmp(~ind_nan),cfg.polyorder);
 
-            % Log non-NaN detrended data
             iptr  = 1;
             for is = 1:length(ind_nan)
                 if ind_nan(is) == 1
@@ -114,40 +109,31 @@ for isubj = subjlist
                     iptr = iptr + 1;
                 end
             end
-        end
-
-        % Find the indices of events 
-        % idx ( : , 1/STIM 2/RESP 3/FBCK 4/END)
-        [~,imsg] = pupil_event_indexer_rlvsl(data_eye);
-        imsg = imsg(3+4*(0:nt-1));
-
-        % Extract epochs
-        for it = 1:nt
-            tstart = imsg(it) - epoch_window(1);
-            tend   = imsg(it) + epoch_window(2);
-
-            if excluded_trials(it,ctr_blck,ctr_subj)
-                if ~cfg.incl_nan
-                    continue
+            
+            % Find the indices of events 
+            % idx ( : , 1/STIM 2/RESP 3/FBCK 4/END)
+            [~,imsg] = pupil_event_indexer_rlvsl(data_eye);
+            imsg = imsg(3+4*(0:nt-1));
+            
+            % Extract epochs
+            for it = 1:nt
+                tstart = imsg(it) - epoch_window(1);
+                tend   = imsg(it) + epoch_window(2);
+                
+                if excluded_trials(it,ctr_blck,ctr_subj)
+                    if ~cfg.incl_nan
+                        continue
+                    else
+                        ctr_epoch = ctr_epoch+1;
+                        epochs(ctr_epoch,:) = nan(1,length(tstart:tend)); % log the epoch
+                    end
                 else
                     ctr_epoch = ctr_epoch+1;
-                    epochs(ctr_epoch,:) = nan(1,length(tstart:tend)); % log the epoch
+                    epochs(ctr_epoch,:) = pupil_detrend_rbst(tstart:tend); % log the epoch
                 end
-            else
-                ctr_epoch = ctr_epoch+1;
-                if cfg.isdetrend
-                    epochs(ctr_epoch,:) = pupil_detrend_rbst(tstart:tend);  % log detrended data
-                else
-                    epochs(ctr_epoch,:) = psmp(tstart:tend);                % log raw data
-                end
+                idx_subj_epoch(ctr_epoch) = ctr_subj;    % log the relative subj number
             end
-            idx_subj_epoch(ctr_epoch) = ctr_subj;    % log the relative subj number
         end
-    end
-    if cfg.iszscored
-        zscore_xnan = @(x) bsxfun(@rdivide, bsxfun(@minus, x, mean(x,'all','omitnan')), std(x,1,'all','omitnan'));
-        epochs_z = zscore_xnan(epochs(idx_subj_epoch == ctr_subj,:));
-        epochs(idx_subj_epoch == ctr_subj,:) = epochs_z;
     end
 end
 
@@ -177,7 +163,6 @@ if cfg.incl_nan
     out.qts            = qts;
     out.bks            = bks;
     out.trs            = trs;
-    out.cds            = cds;
     out.ind_epoch_nan  = ind_epoch_nan;
 else
     fbs = fbs(~excluded_trials);
@@ -193,7 +178,6 @@ else
     out.qts            = qts(~ind_epoch_nan);
     out.bks            = bks(~ind_epoch_nan);
     out.trs            = trs(~ind_epoch_nan);
-    out.cds            = cds(~ind_epoch_nan);
 end
 out.epoch_window = epoch_window;
 
