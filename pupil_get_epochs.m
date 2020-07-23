@@ -7,6 +7,8 @@ function [out] = pupil_get_epochs(subjlist,cfg)
 % Input:        subjlist - array of subjects to be included in analysis
 %               setrange - hardcoded right epoch window limit (seconds)
 %               cfg      - structure containing fields:
+%    (required)             ievent    : onset event of interest
+%    (optional)             ievent_end: ending event of interest
 %    (optional)             lim_epoch : right-most limit of an epoch (STIM or END)
 %    (optional)             min_prefb : minimum sampling points a trial must have before
 %                                        feedback onset      
@@ -47,6 +49,20 @@ end
 if ~isfield(cfg,'iszscored')
     cfg.iszscored = false;
 end
+if ~isfield(cfg,'ievent')
+    error('Indicate which event (1/STIM 2/RESP 3/FBCK 4/END) is considered the onset event.');
+end
+ievent = cfg.ievent; % onset event : 1/STIM 2/RESP 3/FBCK 4/END
+if ~isfield(cfg,'ievent_end')
+    ievent_end = 4;
+else
+    if ~ismember(cfg.ievent_end,1:4)
+        error('Invalid ending event index provided!');
+    else
+        ievent_end = cfg.ievent_end;
+    end
+end
+
 
 % Add robust detrending toolbox path
 addpath('./Toolboxes/NoiseTools/');
@@ -61,9 +77,10 @@ end
 fbs = fbs-50; % make the negative feedback actually negative
 nt = size(fbs,1);
 nb = size(fbs,2);
-n_excld = sum(sum(sum(excluded_trials)));
-epochs = nan(numel(fbs)-n_excld,sum(epoch_window)+1);
-idx_subj_epoch = zeros(numel(fbs)-n_excld,1);
+n_excld             = sum(sum(sum(excluded_trials)));
+epochs              = nan(numel(fbs)-n_excld,sum(epoch_window)+1); % pupil size values within a given epoch
+idx_range_interest  = false(size(epochs)); % logical indexing array of epoch samples within interest range
+idx_subj_epoch      = zeros(numel(fbs)-n_excld,1);
 
 if ~isfield(cfg,'polyorder')
     cfg.polyorder = nt;
@@ -119,13 +136,15 @@ for isubj = subjlist
         % Find the indices of events 
         % idx ( : , 1/STIM 2/RESP 3/FBCK 4/END)
         [~,imsg] = pupil_event_indexer_rlvsl(data_eye);
-        imsg = imsg(3+4*(0:nt-1));
-
+        
+        imsg_end = imsg(ievent_end+4*(0:nt-1));
+        imsg     = imsg(ievent+4*(0:nt-1));
+        
         % Extract epochs
         for it = 1:nt
             tstart = imsg(it) - epoch_window(1);
             tend   = imsg(it) + epoch_window(2);
-
+            
             if excluded_trials(it,ctr_blck,ctr_subj)
                 if ~cfg.incl_nan
                     continue
@@ -141,6 +160,7 @@ for isubj = subjlist
                     epochs(ctr_epoch,:) = psmp(tstart:tend);                % log raw data
                 end
             end
+            idx_range_interest(ctr_epoch,epoch_window(1):epoch_window(1)+imsg_end(it)-imsg(it)) = true; % log the locations of pupil samples within interest range
             idx_subj_epoch(ctr_epoch) = ctr_subj;    % log the relative subj number
         end
     end
@@ -150,6 +170,8 @@ for isubj = subjlist
         epochs(idx_subj_epoch == ctr_subj,:) = epochs_z;
     end
 end
+idx_range_interest = idx_range_interest(:,1:size(epochs,2));
+
 
 excluded_trials = excluded_trials(:);
 fbs = fbs(:); 
@@ -157,6 +179,7 @@ rsp = rsp(:);
 qts = qts(:); 
 trs = trs(:); 
 bks = bks(:); 
+cds = cds(:);
 
 ind_epoch_nan = false(size(epochs,1),1); % indicates epochs where NaN is found
 
@@ -179,6 +202,7 @@ if cfg.incl_nan
     out.trs            = trs;
     out.cds            = cds;
     out.ind_epoch_nan  = ind_epoch_nan;
+    out.idx_range_interest = idx_range_interest;
 else
     fbs = fbs(~excluded_trials);
     rsp = rsp(~excluded_trials);
@@ -194,6 +218,7 @@ else
     out.bks            = bks(~ind_epoch_nan);
     out.trs            = trs(~ind_epoch_nan);
     out.cds            = cds(~ind_epoch_nan);
+    out.idx_range_interest = idx_range_interest;
 end
 out.epoch_window = epoch_window;
 

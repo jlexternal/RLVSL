@@ -55,7 +55,8 @@ for isubj = subjlist
         resp_mult = -(expe(ib).resp-1.5)*2;
         blcks(ib_c(icond),:,icond,isubj) = round(resp_mult.*expe(ib).blck*a+b);
         
-        rts(ib_c(icond),:,icond,isubj) = expe(ib).rt;
+        rts(ib_c(icond),:,icond,isubj)      = expe(ib).rt;
+        resps(ib_c(icond),:,icond,isubj)    = expe(ib).resp;
         ib_c(icond) = ib_c(icond)+1;
     end
 end
@@ -107,6 +108,7 @@ xlabel('Quarter','FontSize',14);
 xlim([.5 4.5]);
 legend(condtypes,'Location','southeast');
 title(sprintf('Effect of feedback value on reaction times\nError bars: SEM'),'FontSize',12);
+
 
 %% 2a. Organize: Correlation between feedback magnitude and RT before and after epiphanies within conditions
 coefs_rt_fb_epiph_rep = zeros(nsubj,2); 
@@ -251,6 +253,7 @@ ylim([-.9 .1]);
 legend({'Repeating','Random (locked to Rep.)','Alternating','Random (locked to Alt.)'},'Location','southeast');
 title(sprintf('Effect of feedback value on reaction times\n(%d/%d subjects) Error bars: SEM',size(coefs_rt_fb_epiph_rnd,1),nsubj),'FontSize',12);
 
+
 %% 3a. Organize: Correlation of RTs and feedback magnitude grouped on BIASED vs UNBIASED blocks
 
 % Load epsilon-greedy percentages
@@ -322,7 +325,8 @@ legtxt = {'unbiased','biased'};
 legend([legtxt],'Location','southeast');
 title(sprintf('Effect of feedback value on reaction times\nError bars: SEM'),'FontSize',12);
 
-%% 4a. Organize: RTs grouped on BIASED vs UNBIASED blocks
+
+%% 4a. Organize: RTs (z-scored) grouped on BIASED vs UNBIASED blocks
 
 % Load epsilon-greedy percentages
 load('out_fit_epsi.mat');
@@ -363,7 +367,7 @@ nonbiased_subjs = numel(find(sum(nonbiased_subjs,2) == 0));
 
 [h,p] = ttest2(rt_means_bias(:,1),rt_means_bias(:,2),'VarType','unequal'); % Welch's t-test (for unequal sample size)
 
-%% 4b. Plot: RTs grouped on BIASED vs UNBIASED blocks
+%% 4b. Plot: RTs (z-scored) grouped on BIASED vs UNBIASED blocks
 figure;
 hold on;
 for ibias = 1:2
@@ -382,6 +386,199 @@ ylabel('Reaction Time (s)','FontSize',14);
 legtxt = {'unbiased','biased'};
 legend([legtxt],'Location','southeast');
 title(sprintf('Reaction times on (un)biased quarters\nError bars: SEM'),'FontSize',12);
+
+%% 5a. Organize: Trial-wide RTs grouped on BIASED vs UNBIASED blocks
+
+% This analysis looks at the average RT (z-scored) from the onset of the
+% stimulus to the end of the trial across the 16 trials in a block for all subjects
+% in all conditions, grouped by whether the subject was biased or unbiased in a given
+% quarter. 
+
+% Load epsilon-greedy percentages
+load('out_fit_epsi.mat');
+epsi(:,:,:,1) = [];
+epsi(epsi<=.5) = 0;
+epsi(epsi~=0) = 1;
+
+rt_means_bias = nan(nsubj,nt,2);
+for isubj = 1:nsubj
+    
+    rts_zscored = zscore(rts(:,:,:,subjlist(isubj)),0,'all'); % z-score RTs for the subject across entire experiment
+    
+    rts_vec1 = [];
+    rts_vec2 = [];
+    for icond = 1:nc
+        for iq = 1:4
+            blockrange = 4*(iq-1)+1:4*(iq-1)+4;
+            if epsi(isubj,icond,iq) == 0
+                rts_vec1 = cat(1,rts_vec1,rts_zscored(blockrange,1:nt,icond));
+            else
+                rts_vec2 = cat(1,rts_vec2,rts_zscored(blockrange,1:nt,icond));
+            end
+        end 
+    end
+    
+    % Get averages
+    for ibias = 1:2
+        if ibias == 1
+            rts_vec = mean(rts_vec1,1);
+        else
+            rts_vec = mean(rts_vec2,1);
+        end
+        
+        if isempty(rts_vec)
+            rts_vec = nan(1,16);
+        end
+        rt_means_bias(isubj,:,ibias) = rts_vec;
+    end
+end
+
+% Count number of subjects who are never biased (for SEM calculation)
+nonbiased_subjs = [];
+for i = 1:4
+    nonbiased_subjs = cat(2,nonbiased_subjs,epsi(:,:,i));
+end
+nonbiased_subjs = numel(find(sum(nonbiased_subjs,2) == 0));
+
+% Statistics
+h = zeros(1,nt);
+p = h;
+for it = 1:16
+    [h(it),p(it)] = ttest2(rt_means_bias(:,it,1),rt_means_bias(:,it,2),'VarType','unequal'); % Welch's t-test (for unequal sample size)
+end
+
+%% 5b. Plot: Trial-wide RTs grouped on BIASED vs UNBIASED blocks
+figure;
+hold on;
+plotrgb = [.5 .5 .5;.8 .2 .2];
+for ibias = 1:2
+    if ibias == 2
+        nsubj_temp = nsubj-nonbiased_subjs;
+    else
+        nsubj_temp = nsubj;
+    end
+    shadedErrorBar(1:nt,mean(rt_means_bias(:,:,ibias),1,'omitnan'),std(rt_means_bias(:,:,ibias),0,1,'omitnan')/sqrt(nsubj_temp),...
+        'lineprops',{'Color',plotrgb(ibias,:),'LineWidth',2},'patchSaturation',0.075);
+    for it = 1:nt
+        scatter(it,mean(rt_means_bias(:,it,ibias),1,'omitnan'),60,'MarkerFaceColor',plotrgb(ibias,:),'MarkerFaceAlpha',.8,...
+            'MarkerEdgeColor',[0 0 0],'MarkerEdgeAlpha',h(it),'LineWidth',1.5,'HandleVisibility','off');
+    end
+end
+xticks([4 8 12 16]);
+ylabel('reaction time (z)','FontSize',12);
+legtxt = {'unbiased','biased'};
+legend(legtxt,'Location','northeast');
+
+%% 6a. Organize: RT on SWITCH trials accounting for general trial-wide RT trends
+
+% This analysis looks at the average RT (z-scored) around switch trials, having
+% subtracted general trends from the above analysis (5a). Switch trials that occur
+% within the window of the main switch trial are disregarded.
+
+% Note: Code section 5a must be run previous to this.
+
+nt_bfr = 4; % number of trials around switch point (buffer trials)
+rts_switch_means = nan(nsubj,nt_bfr*2+1);
+
+for isubj = 1:nsubj
+    % ignore excluded subjects
+    resps_s     = resps(:,:,:,subjlist(isubj));
+    rts_zscored = zscore(rts(:,:,:,subjlist(isubj)),0,'all');
+    
+    rts_switch = [];
+    
+    for ic = 1:nc
+        for ib = 1:nb_c
+            % calculate quarter of block
+            iq = ceil((ib-eps)/4);
+            % determine whether quarter was biased or not
+            if epsi(isubj,ic,iq) == 0
+                biasflag = false;
+            else
+                biasflag = true;
+            end
+            
+            % find switch trials
+            for it = 2:nt
+                if resps_s(ib,it,ic) ~= resps_s(ib,it-1,ic)
+                    % NaNs for left side of switch
+                    if it-nt_bfr <= 0
+                        bfr_l   = nt_bfr-it+1;  % left NaN buffer 
+                        range_l = 1;            % left RT range limit
+                    else
+                        bfr_l   = 0;
+                        range_l = it-nt_bfr;
+                    end
+                    % NaNs for right side of switch
+                    if nt-it-nt_bfr < 0
+                        bfr_r   = -(nt-it-nt_bfr);  % right NaN buffer
+                        range_r = nt;               % right RT range limit
+                    else
+                        bfr_r   = 0;
+                        range_r = it+nt_bfr;
+                    end
+                    
+                    % Account for switches that happen within the range limits and
+                    %   mark them for exclusion
+                    excl_tr = [];
+                    for jt = 1:4
+                        % Check if pointer at the left end of the response array
+                        if it-jt > 1
+                            % Find switches before main switch and mark
+                            if resps_s(ib,it-jt,ic) ~= resps_s(ib,it-jt-1,ic)
+                                excl_tr = cat(2,excl_tr,nt_bfr+1-jt);
+                            end
+                        end
+                        % Check if pointer at the right end of the response array
+                        if it+jt <= 16
+                            % Find switches before main switch and mark
+                            if resps_s(ib,it+jt,ic) ~= resps_s(ib,it+jt-1,ic)
+                                excl_tr = cat(2,excl_tr,nt_bfr+1+jt);
+                            end
+                        end
+                    end
+                    % Subtract general effect of RTs based on trial position and bias
+                    if biasflag
+                        rt_means_normd = bsxfun(@minus,...
+                            [nan(1,bfr_l) rts_zscored(ib,range_l:range_r,ic) nan(1,bfr_r)], ...
+                            [nan(1,bfr_l) rt_means_bias(isubj,range_l:range_r,2) nan(1,bfr_r)]);
+                    else
+                        rt_means_normd = bsxfun(@minus,...
+                            [nan(1,bfr_l) rts_zscored(ib,range_l:range_r,ic) nan(1,bfr_r)], ...
+                            [nan(1,bfr_l) rt_means_bias(isubj,range_l:range_r,1) nan(1,bfr_r)]);
+                    end
+                    rt_means_normd(excl_tr) = NaN;
+                    rts_switch = cat(1,rts_switch,rt_means_normd);
+                end
+            end
+        end
+    end
+    rts_switch_means(isubj,:) = mean(rts_switch,1,'omitnan');
+end
+
+% Statistics
+h = zeros(1,size(rts_switch_means,2));
+p = h;
+for it = 1:size(rts_switch_means,2)
+    [h(it),p(it)] = ttest(rts_switch_means(:,it)); 
+end
+
+%% 6b. Plot: RTs around switches after accounting for general trends from bias/unbiased quarters
+figure;
+plotrgb = [.5 .5 .8];
+hold on;
+for ibias = 1:2
+    shadedErrorBar(1:size(rts_switch_means,2),mean(rts_switch_means,1,'omitnan'),std(rts_switch_means,0,1,'omitnan')/sqrt(nsubj),...
+        'lineprops',{'Color',plotrgb,'LineWidth',2},'patchSaturation',0.075);
+    for it = 1:size(rts_switch_means,2)
+        scatter(it,mean(rts_switch_means(:,it),1,'omitnan'),60,'MarkerFaceAlpha',.8,'MarkerFaceColor',plotrgb,...
+            'MarkerEdgeColor',[0 0 0],'MarkerEdgeAlpha',h(it),'LineWidth',1.5,'HandleVisibility','off');
+    end
+end
+xticklabels(-4:4);
+ylabel('reaction time (z)','FontSize',12);
+yline(0);
+xline(5,'--');
 
 %% local functions
 function rgb = graded_rgb(ic,ib,nb)
