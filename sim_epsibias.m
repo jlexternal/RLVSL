@@ -26,6 +26,12 @@ zeta    = 0.3+eps;  % Learning noise scale
 ksi     = 0.0+eps;  % Learning noise constant
 epsis   = 0.2;      % Blind structure choice 0: all RL, 1: all SL
 
+params_gen = struct;
+params_gen.kini = kini;
+params_gen.kinf = kinf;
+params_gen.zeta = zeta;
+params_gen.ksi  = ksi;
+
 sbias_cor = true;   % bias toward the correct structure
 sbias_ini = true;   % initial biased means
 
@@ -39,6 +45,7 @@ sim_struct = struct;
 
 out_ctr = 0;
 for epsi = epsis
+    params_gen.epsi = epsi;
     out_ctr = out_ctr + 1;
     % Generate experiment (reward scheme)
     cfg_gb = struct; cfg_gb.ntrls = nt; cfg_gb.mgen = r_mu; cfg_gb.sgen = r_sd; cfg_gb.nbout = nb;
@@ -51,6 +58,7 @@ for epsi = epsis
             rew = cat(3,rew,round(gen_blck_rlvsl(cfg_gb),2));
         end
     end
+    rew_c = nan(size(rew));
 
     % Kalman Filter variables
     pt = nan(nb,nt,ns);     % response probability
@@ -108,10 +116,19 @@ for epsi = epsis
                 if io == 1
                     rew_seen    = rew(ib,it-1,idx_c);
                     rew_unseen  = 1-rew(ib,it-1,idx_c);
+                    if it == nt
+                        rew_c(ib,it,idx_c) = rew(ib,it,idx_c);
+                    end
                 else
                     rew_seen    = 1-rew(ib,it-1,idx_c);
                     rew_unseen  = rew(ib,it-1,idx_c);
+                    if it == nt
+                        rew_c(ib,it,idx_c) = 1-rew(ib,it,idx_c);
+                    end
                 end
+                rew_c(ib,it-1,idx_c) = rew_seen;
+                
+                
                 rew_seen    = reshape(rew_seen,size(mt(ib,it-1,c,idx_c)));
                 rew_unseen  = reshape(rew_unseen,size(mt(ib,it-1,c,idx_c)));
                 mt(ib,it,c,idx_c) = mt(ib,it-1,c,idx_c) + reshape(kt(c,idx_c),size(rew_seen)).*(rew_seen-mt(ib,it-1,c,idx_c));
@@ -158,6 +175,16 @@ for epsi = epsis
         end
         
     end
+    
+    % output simulation data
+    sim_struct(out_ctr).kini = kini;
+    sim_struct(out_ctr).kinf = kinf;
+    sim_struct(out_ctr).zeta = zeta;
+    sim_struct(out_ctr).ksi  = ksi;
+    sim_struct(out_ctr).vs   = vs;
+    sim_struct(out_ctr).resp = rt;
+    sim_struct(out_ctr).rews = rew_c;
+    
     rt(rt==2)=0;
 end
 
