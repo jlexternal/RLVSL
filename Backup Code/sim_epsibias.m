@@ -1,6 +1,8 @@
 % sim_epsibias
 
 % simulate model with epsilon-greedy bias
+clc;
+clear all;
 
 % Experimental parameters
 nb = 16;
@@ -17,15 +19,15 @@ fk = @(v)1./(1+exp(+0.4486-log2(v/vs)*0.6282)).^0.5057;
 fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
 
 % Model parameters
-ns      = 1;       % Number of simulated agents to generate per given parameter % do not change
+ns      = 5;        % Number of simulated agents to generate per given parameter % do not change
 kini    = 1.0-eps;  % Initial Kalman gain
-kinf    = 0.4+eps;  % Asymptotic Kalman gain
-zeta    = 0.4+eps;  % Learning noise scale
+kinf    = 0.0+eps;  % Asymptotic Kalman gain
+zeta    = 0.0+eps;  % Learning noise scale
 ksi     = 0.0;      % Learning noise constant
 epsis   = 0.0;      % Blind structure choice 0: all RL, 1: all SL
 
-sbias_cor = true;   % bias toward the correct structure
-sbias_ini = true;  % initial biased means
+sbias_cor = false;   % bias toward the correct structure
+sbias_ini = true;   % initial biased means
 
 % Simulation settings
 nexp = 10; % number of different reward schemes to try per given parameter set
@@ -33,12 +35,12 @@ nexp = 10; % number of different reward schemes to try per given parameter set
 sim_struct = struct;
 
 %% Run simulation
-%epsis = [0 .1 .2 .3 .4 .5 .6 .7 .8 .9 1];
+%epsis = [0 .1 .2 .3 .4 .5 .6 .7 .8 .9 1]; not working properly yet
 legtxt = {};
 
 out_ctr = 0;
 rt_plot = [];
-for iexps = 1:nexp
+for iexp = 1:nexp
     for epsi = epsis
         out_ctr = out_ctr + 1;
         % Kalman Filter variables
@@ -101,8 +103,7 @@ for iexps = 1:nexp
                 c = rt(ib,it-1,:);
                 u = 3-c;
                 for is = 1:ns
-        %            fprintf('Sim: %d\n',is);  
-                    rew_seen(c(is)) = rew(ib,it-1,is); % seen reward
+                    rew_seen(c(is)) = rew(ib,it-1,is);   % seen reward
                     rew_seen(u(is)) = 1-rew(ib,it-1,is); % unseen reward
                     if rt(ib,it-1,is) == 2
                         rew_seen = 1-rew_seen;
@@ -152,15 +153,15 @@ for iexps = 1:nexp
                                            ssel,reshape(rt(ib,it,irl),[1 numel(irl(irl==1))]));
             end
 
-            % debug code for visuals
+            % debugging code (for visuals)
             if false
-            rt_test = rt;
-            rt_test(rt_test == 2) = 0;
-            shadedErrorBar(1:nt,mean(mean(rt_test(:,:,:),1,'omitnan'),3),std(mean(rt_test(:,:,:),1,'omitnan'),1,3)/sqrt(ns),...
-                        'lineprops',{'LineWidth',2+epsi},'patchSaturation',.1);
+                rt_test = rt;
+                rt_test(rt_test == 2) = 0;
+                shadedErrorBar(1:nt,mean(mean(rt_test(:,:,:),1,'omitnan'),3),std(mean(rt_test(:,:,:),1,'omitnan'),1,3)/sqrt(ns),...
+                            'lineprops',{'LineWidth',2+epsi},'patchSaturation',.1);
             end
         end
-
+        
         sim_struct(out_ctr).epsi = epsi;
         sim_struct(out_ctr).resp = rt;
         sim_struct(out_ctr).rews = rew;
@@ -206,6 +207,8 @@ ylim([.2 1]);
 legend(legtxt,'Location','southwest');
 
 %% Recover models
+
+% not ready
 
 % organize simulated output data
 %   responses
@@ -255,6 +258,10 @@ end
 
 function [x] = tnormrnd(m,s,d)
 % sample from truncated normal distribution
+m
+s
+d
+pause
 if d == 1
     x = +rpnormv(+m,s);
 else
