@@ -42,10 +42,32 @@ nexp     = 10;      % number of different reward schemes to try per given parame
 sim_struct = struct;
 
 %% Run simulation
+epsis = linspace(0,.99,4);
+zetas = [0:.1:.4]+eps;
+kinis = .9;%.5:.1:1;
+kinfs = .2;%0:.1:.4;
 
-out_ctr = 0;
+param_sets = {};
+p_ctr = 0;
 for epsi = epsis
-    params_gen.epsi = epsi;
+    for zeta = zetas
+        for kini = kinis
+            for kinf = kinfs
+                p_ctr = p_ctr + 1;
+                param_sets{p_ctr} = [epsi,zeta,kini,kinf];
+            end
+        end
+    end
+end
+
+%%
+out_ctr = 0;
+for ip = 1:numel(param_sets)
+    epsi = param_sets{ip}(1);
+    zeta = param_sets{ip}(2);
+    kini = param_sets{ip}(3);
+    kinf = param_sets{ip}(4);
+    
     out_ctr = out_ctr + 1;
     % Generate experiment (reward scheme)
     cfg_gb = struct; cfg_gb.ntrls = nt; cfg_gb.mgen = r_mu; cfg_gb.sgen = r_sd; cfg_gb.nbout = nb;
@@ -66,7 +88,7 @@ for epsi = epsis
     mt = nan(nb,nt,2,ns);   % posterior mean
     vt = nan(nb,nt,2,ns);   % posterior variance
     st = nan(nb,nt,2,ns);   % current-trial filtering noise
-    rb = nan(ns,1);           % response bias
+    rb = nan(ns,1);         % response bias
     
     for ib = 1:nb
         for it = 1:nt
@@ -82,8 +104,9 @@ for epsi = epsis
                 % initialize KF means and variances
                 if sbias_ini
                     % initial tracking mean biased toward generative mean
-                    mt(ib,it,1,find(rb==1)) = r_mu;
-                    mt(ib,it,1,find(rb==2)) = 1-r_mu;
+                    ind_rb = rb == 1;
+                    mt(ib,it,1,ind_rb)  = r_mu;
+                    mt(ib,it,1,~ind_rb) = 1-r_mu;
                     mt(ib,it,2,:) = 1-mt(ib,it,1,:);
                 else
                     % initial tracking mean unbiased
@@ -110,36 +133,34 @@ for epsi = epsis
             kt = reshape(vt(ib,it-1,:,:)./(vt(ib,it-1,:,:)+vs),[2 ns]);
             % update posterior mean & variance
             for io = 1:2
-                idx_c = find(rt(ib,it-1,:)==io); % index of sims
+                ind_c = find(rt(ib,it-1,:)==io); % index of sims
                 c = io;     % chosen option
                 u = 3-io;   % unchosen option
                 if io == 1
-                    rew_seen    = rew(ib,it-1,idx_c);
-                    rew_unseen  = 1-rew(ib,it-1,idx_c);
+                    rew_seen    = rew(ib,it-1,ind_c);
+                    rew_unseen  = 1-rew(ib,it-1,ind_c);
                     if it == nt
-                        rew_c(ib,it,idx_c) = rew(ib,it,idx_c);
+                        rew_c(ib,it,ind_c) = rew(ib,it,ind_c);
                     end
                 else
-                    rew_seen    = 1-rew(ib,it-1,idx_c);
-                    rew_unseen  = rew(ib,it-1,idx_c);
+                    rew_seen    = 1-rew(ib,it-1,ind_c);
+                    rew_unseen  = rew(ib,it-1,ind_c);
                     if it == nt
-                        rew_c(ib,it,idx_c) = 1-rew(ib,it,idx_c);
+                        rew_c(ib,it,ind_c) = 1-rew(ib,it,ind_c);
                     end
                 end
-                rew_c(ib,it-1,idx_c) = rew_seen;
+                rew_c(ib,it-1,ind_c) = rew_seen; % output for recovery
                 
+                rew_seen    = reshape(rew_seen,size(mt(ib,it-1,c,ind_c)));
+                rew_unseen  = reshape(rew_unseen,size(mt(ib,it-1,c,ind_c)));
+                mt(ib,it,c,ind_c) = mt(ib,it-1,c,ind_c) + reshape(kt(c,ind_c),size(rew_seen)).*(rew_seen-mt(ib,it-1,c,ind_c));
+                vt(ib,it,c,ind_c) = (1-reshape(kt(c,ind_c),size(rew_seen))).*vt(ib,it-1,c,ind_c);
+                st(ib,it,c,ind_c) = sqrt(zeta^2*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); % RPE-scaled learning noise
                 
-                rew_seen    = reshape(rew_seen,size(mt(ib,it-1,c,idx_c)));
-                rew_unseen  = reshape(rew_unseen,size(mt(ib,it-1,c,idx_c)));
-                mt(ib,it,c,idx_c) = mt(ib,it-1,c,idx_c) + reshape(kt(c,idx_c),size(rew_seen)).*(rew_seen-mt(ib,it-1,c,idx_c));
-                vt(ib,it,c,idx_c) = (1-reshape(kt(c,idx_c),size(rew_seen))).*vt(ib,it-1,c,idx_c);
-                st(ib,it,c,idx_c) = sqrt(zeta^2*((rew_seen-mt(ib,it-1,c,idx_c)).^2+ksi^2)); % RPE-scaled learning noise
-                
-                mt(ib,it,u,idx_c) = mt(ib,it-1,u,idx_c) + reshape(kt(u,idx_c),size(rew_unseen)).*(rew_unseen-mt(ib,it-1,u,idx_c));
-                vt(ib,it,u,idx_c) = (1-reshape(kt(u,idx_c),size(rew_unseen))).*vt(ib,it-1,u,idx_c);
-                st(ib,it,u,idx_c) = sqrt(zeta^2*((rew_unseen-mt(ib,it-1,u,idx_c)).^2+ksi^2));
+                mt(ib,it,u,ind_c) = mt(ib,it-1,u,ind_c) + reshape(kt(u,ind_c),size(rew_unseen)).*(rew_unseen-mt(ib,it-1,u,ind_c));
+                vt(ib,it,u,ind_c) = (1-reshape(kt(u,ind_c),size(rew_unseen))).*vt(ib,it-1,u,ind_c);
+                st(ib,it,u,ind_c) = sqrt(zeta^2*((rew_unseen-mt(ib,it-1,u,ind_c)).^2+ksi^2));
             end
-            
             % variance extrapolation + diffusion process 
             vt(ib,it,:,:)  = vt(ib,it,:,:)+fv(kinf); % covariance noise update    
             % selection noise
@@ -150,7 +171,6 @@ for epsi = epsis
             % sample trial types (based on epsi param)
             isl = rand(1,ns) < epsi;
             irl = ~isl;
-            
              % Structure-utilising agents
             if nnz(isl) > 0
                 pt(ib,it,isl) = rb(isl) == 1;
@@ -159,11 +179,9 @@ for epsi = epsis
             if nnz(irl) > 0
                 pt(ib,it,irl) = 1-normcdf(0,md(irl),sd(irl));
             end
-
             % extract choice from probabilities
             rt(ib,it,:) = round(pt(ib,it,:));
             rt(rt==0) = 2;
-
             % resampling w/o conditioning on response
             mt(ib,it,:,isl) = normrnd(mt(ib,it,:,isl),st(ib,it,:,isl));
             % resampling conditioning on response
@@ -177,33 +195,34 @@ for epsi = epsis
     end
     
     % output simulation data
+    sim_struct(out_ctr).epsi = epsi;
+    sim_struct(out_ctr).zeta = zeta;
     sim_struct(out_ctr).kini = kini;
     sim_struct(out_ctr).kinf = kinf;
-    sim_struct(out_ctr).zeta = zeta;
     sim_struct(out_ctr).ksi  = ksi;
     sim_struct(out_ctr).vs   = vs;
     sim_struct(out_ctr).resp = rt;
     sim_struct(out_ctr).rews = rew_c;
     
-    rt(rt==2)=0;
+    % plot simulation data
+    if true
+        rt(rt==2)=0;
+        figure(1);
+        hold on;
+        shadedErrorBar(1:nt,mean(mean(rt,3),1),std(mean(rt,3))/sqrt(ns),'lineprops',{'LineWidth',2+epsi},'patchSaturation',.1);
+        ylim([0 1]);
+        yline(.5,'--','HandleVisibility','off');
+        xticks([1:4]*4);
+        xlabel('trial number');
+        ylabel('proportion correct');
+        title(sprintf('Params: kini:%0.2f, kinf: %0.2f, zeta: %0.2f, epsi: %0.2f\n nsims:%d',kini,kinf,zeta,epsi,ns));
+        ylim([.2 1]);
+    end
 end
 
 
-%% plotting
-figure(1);
-hold on;
-shadedErrorBar(1:nt,mean(mean(rt,3),1),std(mean(rt,3))/sqrt(ns),...
-                'lineprops',{'LineWidth',2+epsi},'patchSaturation',.1);
-ylim([0 1]);
-yline(.5,'--','HandleVisibility','off');
-xticks([1:4]*4);
-xlabel('trial number');
-ylabel('proportion correct');
-title(sprintf('Params: kini:%0.2f, kinf: %0.2f, zeta: %0.2f, epsi: %0.2f\n nsims:%d',kini,kinf,zeta,epsi,ns))
-%end
-
-ylim([.2 1]);
-
+%% Recovery
+% a recovered parameter should be for a single simulation (i.e. output from 1 sim)
 
 %% Local functions
 function [xt] = resample(m,s,ssel,r)
@@ -225,7 +244,7 @@ end
 
 function [x] = tnormrnd(m,s,d)
 % sample from truncated normal distribution
-for id = d:numel(d)
+for id = 1:numel(d)
     if d(id) == 1
         x(id) = +rpnormv(+m(id),s(id));
     else

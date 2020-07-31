@@ -174,7 +174,6 @@ ylabel('proportion correct');
 title(sprintf('Params: kini:%0.2f, kinf: %0.2f, zeta: %0.2f, epsi: %0.2f\n nsims:%d',kini,kinf,zeta,epsi,ns))
 ylim([.2 1]);
 
-
 %% Local functions
 function [xt] = resample(m,s,ssel,r)
 % 1/ resample (x1-x2)
