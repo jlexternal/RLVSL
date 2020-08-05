@@ -17,22 +17,29 @@ vs   = r_sd^2;
 % reparameterization functions
 fk = @(v)1./(1+exp(+0.4486-log2(v/vs)*0.6282)).^0.5057;
 fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
+
+% Assumptions of the model
+sbias_cor = true;   % 1st-choice bias toward the correct structure
+sbias_ini = true;   % KF means biased toward the correct structure
+cscheme = 'qvs';      % 'arg'-argmax; 'qvs'-softmax; 'ths'-Thompson sampling
 % Model parameters
 ns      = 27;       % Number of simulated agents to generate per given parameter
+% KF learning parameters
 kini    = 0.8-eps;  % Initial Kalman gain
 kinf    = 0.3+eps;  % Asymptotic Kalman gain
+% Learning noise parameters
 zeta    = 0.3+eps;  % Learning noise scale
 ksi     = 0.0+eps;  % Learning noise constant
+% Epsilon-greedy parameters
 epsis   = 0.2;      % Blind structure choice 0: all RL, 1: all SL
+% Selection parameters
+theta   = .9;       % Inverse softmax temperature 
 
 params_gen = struct;
 params_gen.kini = kini;
 params_gen.kinf = kinf;
 params_gen.zeta = zeta;
 params_gen.ksi  = ksi;
-
-sbias_cor = true;   % bias toward the correct structure
-sbias_ini = true;   % initial biased means
 
 % Simulation settings
 sameexpe = false;   % true if all sims see the same reward scheme
@@ -41,20 +48,48 @@ nexp     = 10;      % number of different reward schemes to try per given parame
 sim_struct = struct;
 
 %% Run simulation
+if sbias_cor
+    disp('Assuming 1st-choice bias toward the correct structure!');
+else
+    disp('Assuming NO 1st-choice bias toward correct structure!');
+end
+if sbias_ini
+    disp('Assuming initial bias of the mean toward the correct structure!');
+else
+    disp('Assuming no initial means bias!');
+end
+if ~ismember(cscheme,{'arg','qvs','ths'})
+    error('Undefined or unrecognized choice sampling scheme!');
+end
+
 % Organize parameter sets for simulation
 epsis = linspace(0,.9,5);
 zetas = [0:.1:.5]+eps;
 kinis = [.75 .9];%.5:.1:1;
 kinfs = [.1 .2];%0:.1:.4;
+thetas = [0 .2 .4 .6 .8 1];
 param_sets = {};
 
+% reparametrizing theta for the different choice schemes
+switch cscheme
+    case 'arg' % argmax
+        thetas = 0;
+    case 'qvs' % regular softmax
+        thetas = thetas;
+    case 'ths' % Thompson sampling
+        thetas = thetas*2;
+end
+
+% define parameter sets
 p_ctr = 0;
 for epsi = epsis
     for zeta = zetas
         for kini = kinis
             for kinf = kinfs
-                p_ctr = p_ctr + 1;
-                param_sets{p_ctr} = [epsi,zeta,kini,kinf];
+                for theta = thetas
+                    p_ctr = p_ctr + 1;
+                    param_sets{p_ctr} = [epsi,zeta,kini,kinf,theta];
+                end
             end
         end
     end
@@ -66,6 +101,9 @@ for ip = 1:numel(param_sets)
     zeta = param_sets{ip}(2);
     kini = param_sets{ip}(3);
     kinf = param_sets{ip}(4);
+    theta = param_sets{ip}(5);
+    
+    ssel = pi/sqrt(6)*theta;
     
     out_ctr = out_ctr + 1;
     % Generate experiment (reward scheme)
@@ -161,17 +199,17 @@ for ip = 1:numel(param_sets)
                 vt(ib,it,u,ind_c) = (1-reshape(kt(u,ind_c),size(rew_unseen))).*vt(ib,it-1,u,ind_c);
                 st(ib,it,u,ind_c) = sqrt(zeta^2*((rew_unseen-mt(ib,it-1,u,ind_c)).^2+ksi^2));
             end
-            % variance extrapolation + diffusion process 
+            % variance extrapolation/diffusion process 
             vt(ib,it,:,:)  = vt(ib,it,:,:)+fv(kinf); % covariance noise update
             
-            % selection noise
-            ssel = 0;
-            
-            
             % decision variable stats
-            md = reshape(mt(ib,it,1,:)-mt(ib,it,2,:),[1 ns]);
-            sd = reshape(sqrt(sum(st(ib,it,:,:).^2,3)+ssel^2),[1 ns]);
-            
+            if ~strcmpi(cscheme,'ths')
+                md = reshape(mt(ib,it,1,:)-mt(ib,it,2,:),[1 ns]);
+                sd = reshape(sqrt(sum(st(ib,it,:,:).^2,3)+ssel^2),[1 ns]);
+            else
+                md = reshape((mt(ib,it,1,:)-mt(ib,it,2,:))./sqrt(sum(vt(ib,it,:,:))),[1 ns]);
+                sd = reshape(sqrt(sum(st(ib,it,:,:).^2,3)./sum(vt(ib,it,:,:),3)+ssel^2),[1 ns]);
+            end
             
             % sample trial types (based on epsi param)
             isl = rand(1,ns) < epsi;
@@ -179,6 +217,8 @@ for ip = 1:numel(param_sets)
              % Structure-utilising agents
             if nnz(isl) > 0
                 pt(ib,it,isl) = rb(isl) == 1;
+                % resampling w/o conditioning on response
+                mt(ib,it,:,isl) = normrnd(mt(ib,it,:,isl),st(ib,it,:,isl));
             end
             % RL-utilising agents
             if nnz(irl) > 0
@@ -187,13 +227,21 @@ for ip = 1:numel(param_sets)
             % extract choice from probabilities
             rt(ib,it,:) = round(pt(ib,it,:));
             rt(rt==0) = 2;
-            % resampling w/o conditioning on response
-            mt(ib,it,:,isl) = normrnd(mt(ib,it,:,isl),st(ib,it,:,isl));
-            % resampling conditioning on response
+            % resample means conditioned upon response for RL choices
             if nnz(irl) > 0
-                mt(ib,it,:,irl) = resample(reshape(mt(ib,it,:,irl),[2,nnz(irl)]),...
-                                           reshape(st(ib,it,:,irl),[2,nnz(irl)]),...
-                                           ssel,reshape(rt(ib,it,irl),[1 numel(irl(irl==1))]));
+                if zeta > 0 || ksi > 0
+                   if ~strcmpi(cscheme,'ths') % argmax or standard softmax
+                       mt(ib,it,:,irl) = resample(reshape(mt(ib,it,:,irl),[2,nnz(irl)]),...
+                                                  reshape(st(ib,it,:,irl),[2,nnz(irl)]),...
+                                                  ssel,...
+                                                  reshape(rt(ib,it,irl),[1 numel(irl(irl==1))]));
+                   else % Thompson sampling
+                       mt(ib,it,:,irl) = resample(reshape(mt(ib,it,:,irl),[2,nnz(irl)]),...
+                                                  reshape(st(ib,it,:,irl),[2,nnz(irl)]),...
+                                                  reshape(ssel*sqrt(sum(vt(ib,it,:,irl),3)),[1 nnz(irl)]),... % width increase due to KF variance
+                                                  reshape(rt(ib,it,irl),[1 numel(irl(irl==1))]));
+                   end
+                end
             end
         end
     end
@@ -203,13 +251,14 @@ for ip = 1:numel(param_sets)
     sim_struct(out_ctr).zeta = zeta;
     sim_struct(out_ctr).kini = kini;
     sim_struct(out_ctr).kinf = kinf;
+    sim_struct(out_ctr).theta = theta;
     sim_struct(out_ctr).ksi  = ksi;
     sim_struct(out_ctr).vs   = vs;
     sim_struct(out_ctr).resp = rt;
     sim_struct(out_ctr).rew_seen = rew_c;
     
     % plot simulation data
-    if false
+    if true
         rt(rt==2)=0;
         figure(1);
         hold on;
@@ -219,13 +268,13 @@ for ip = 1:numel(param_sets)
         xticks([1:4]*4);
         xlabel('trial number');
         ylabel('proportion correct');
-        title(sprintf('Params: kini:%0.2f, kinf: %0.2f, zeta: %0.2f, epsi: %0.2f\n nsims:%d',kini,kinf,zeta,epsi,ns));
+        title(sprintf('Params: kini:%0.2f, kinf: %0.2f, zeta: %0.2f, theta: %0.2f, epsi: %0.2f\n nsims:%d',kini,kinf,zeta,theta,epsi,ns));
         ylim([.4 1]);
     end
 end
 clearvars -except param_sets sim_struct ns
 
-%% Parameter recovery (divide parameter sets into batch jobs)
+%% Parameter recovery in BATCHES (divide parameter sets into separate "jobs")
 if ~bsxfun(@eq,numel(sim_struct),numel(param_sets))
     error('Number of parameter sets does not match the number of simulation outputs!');
 end
@@ -276,13 +325,6 @@ for ip = idx_batch(ibatch,:)
     end
 end
 
-
-
-
-
-
-
-
 %% Parameter recovery (fit model to simulated data)
 
 if ~bsxfun(@eq,numel(sim_struct),numel(param_sets))
@@ -315,6 +357,7 @@ for ip = 1:numel(param_sets)
 end
 savename = ['fit_struct_epsibias_' datestr(now,'ddmmyyyy')];
 save(savename,'out_fit','param_sets','sim_struct','epsi_fit','zeta_fit','kini_fit','kinf_fit');
+
 %% Organize fit parameters
 
 for ip = 1:numel(param_sets)
@@ -385,10 +428,6 @@ scatter(vals_fit(:,1),vals_fit(:,2),50,'filled');
 ylim([0 1])
 xlabel(sprintf('Generative parameter: %s',param_str{i_gen}));
 ylabel(sprintf('Recovered parameter: %s',param_str{i_rec}));
-
-
-
-
 
 %% Local functions
 function [xt] = resample(m,s,ssel,r)
