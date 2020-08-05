@@ -18,7 +18,7 @@ vs   = r_sd^2;
 fk = @(v)1./(1+exp(+0.4486-log2(v/vs)*0.6282)).^0.5057;
 fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
 % Model parameters
-ns      = 5;       % Number of simulated agents to generate per given parameter
+ns      = 27;       % Number of simulated agents to generate per given parameter
 kini    = 0.8-eps;  % Initial Kalman gain
 kinf    = 0.3+eps;  % Asymptotic Kalman gain
 zeta    = 0.3+eps;  % Learning noise scale
@@ -41,13 +41,13 @@ nexp     = 10;      % number of different reward schemes to try per given parame
 sim_struct = struct;
 
 %% Run simulation
-
 % Organize parameter sets for simulation
-epsis = linspace(0,.99,4);
-zetas = [0:.1:.4]+eps;
-kinis = .9;%.5:.1:1;
-kinfs = .2;%0:.1:.4;
+epsis = linspace(0,.9,5);
+zetas = [0:.1:.5]+eps;
+kinis = [.75 .9];%.5:.1:1;
+kinfs = [.1 .2];%0:.1:.4;
 param_sets = {};
+
 p_ctr = 0;
 for epsi = epsis
     for zeta = zetas
@@ -148,25 +148,31 @@ for ip = 1:numel(param_sets)
                         rew_c(ib,it,ind_c) = 1-rew(ib,it,ind_c);
                     end
                 end
-                rew_c(ib,it-1,ind_c) = rew_seen; % output for recovery
-                
+                rew_c(ib,it-1,ind_c) = rew_seen; % output for recovery procedure
+                % update tracking values
                 rew_seen    = reshape(rew_seen,size(mt(ib,it-1,c,ind_c)));
                 rew_unseen  = reshape(rew_unseen,size(mt(ib,it-1,c,ind_c)));
+                % 1/chosen option
                 mt(ib,it,c,ind_c) = mt(ib,it-1,c,ind_c) + reshape(kt(c,ind_c),size(rew_seen)).*(rew_seen-mt(ib,it-1,c,ind_c));
                 vt(ib,it,c,ind_c) = (1-reshape(kt(c,ind_c),size(rew_seen))).*vt(ib,it-1,c,ind_c);
                 st(ib,it,c,ind_c) = sqrt(zeta^2*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); % RPE-scaled learning noise
-                
+                % 2/unchosen option
                 mt(ib,it,u,ind_c) = mt(ib,it-1,u,ind_c) + reshape(kt(u,ind_c),size(rew_unseen)).*(rew_unseen-mt(ib,it-1,u,ind_c));
                 vt(ib,it,u,ind_c) = (1-reshape(kt(u,ind_c),size(rew_unseen))).*vt(ib,it-1,u,ind_c);
                 st(ib,it,u,ind_c) = sqrt(zeta^2*((rew_unseen-mt(ib,it-1,u,ind_c)).^2+ksi^2));
             end
             % variance extrapolation + diffusion process 
-            vt(ib,it,:,:)  = vt(ib,it,:,:)+fv(kinf); % covariance noise update    
+            vt(ib,it,:,:)  = vt(ib,it,:,:)+fv(kinf); % covariance noise update
+            
             % selection noise
             ssel = 0;
+            
+            
             % decision variable stats
             md = reshape(mt(ib,it,1,:)-mt(ib,it,2,:),[1 ns]);
             sd = reshape(sqrt(sum(st(ib,it,:,:).^2,3)+ssel^2),[1 ns]);
+            
+            
             % sample trial types (based on epsi param)
             isl = rand(1,ns) < epsi;
             irl = ~isl;
@@ -219,12 +225,70 @@ for ip = 1:numel(param_sets)
 end
 clearvars -except param_sets sim_struct ns
 
+%% Parameter recovery (divide parameter sets into batch jobs)
+if ~bsxfun(@eq,numel(sim_struct),numel(param_sets))
+    error('Number of parameter sets does not match the number of simulation outputs!');
+end
+addpath('./vbmc');
+
+nbatch     = 4; % number of batches 
+% holds the index range of the parameters for each batch
+idx_batch   = nan(nbatch,2);
+% number of parameter sets per batch
+n_per_batch = floor(numel(param_sets)/nbatch); 
+% calculate parameter set index limits for each batch
+for ibatch = 1:nbatch
+    idx_batch(ibatch,:) = [1+(ibatch-1)*n_per_batch ibatch*n_per_batch];
+    if ibatch == nbatch
+        if mod(numel(param_sets),nbatch) ~= 0
+            idx_batch(ibatch,:) = [1+ibatch*n_per_batch numel(param_sets)];
+        end
+    end
+end
+
+ibatch_run = 3; % choose which batch to recover
+if ibatch_run > nbatch
+    error('The chosen batch number exceeds the number of batches defined!')
+end
+% Run parameter recovery for the chosen batch
+for ip = idx_batch(ibatch,:)
+    epsi = param_sets{ip}(1);
+    zeta = param_sets{ip}(2);
+    kini = param_sets{ip}(3);
+    kinf = param_sets{ip}(4);
+    
+    for isim = 1:ns
+        cfg = [];
+        cfg.resp = sim_struct(ip).resp(:,:,isim);
+        cfg.rt = sim_struct(ip).rew_seen(:,:,isim);
+        cfg.vs = sim_struct(ip).vs;
+        cfg.nsmp = 1e3;
+        cfg.lstruct = 'sym'; % assume symmetric action values
+        cfg.verbose = true; % plot fitting information
+        cfg.ksi = 0; % assume no constant term in learning noise
+
+        out_fit{ip,isim} = fit_noisyKF_epsibias(cfg); % fit the model to data
+        
+        epsi_fit{ip,isim} = out_fit{ip,isim}.epsi;
+        zeta_fit{ip,isim} = out_fit{ip,isim}.zeta;
+        kini_fit{ip,isim} = out_fit{ip,isim}.kini;
+        kinf_fit{ip,isim} = out_fit{ip,isim}.kinf;
+    end
+end
+
+
+
+
+
+
+
+
 %% Parameter recovery (fit model to simulated data)
 
 if ~bsxfun(@eq,numel(sim_struct),numel(param_sets))
     error('Number of parameter sets does not match the number of simulation outputs!');
 end
-
+addpath('./vbmc')
 for ip = 1:numel(param_sets)
     epsi = param_sets{ip}(1);
     zeta = param_sets{ip}(2);
@@ -251,7 +315,7 @@ for ip = 1:numel(param_sets)
 end
 savename = ['fit_struct_epsibias_' datestr(now,'ddmmyyyy')];
 save(savename,'out_fit','param_sets','sim_struct','epsi_fit','zeta_fit','kini_fit','kinf_fit');
-%% Check recovery (single parameter)
+%% Organize fit parameters
 
 for ip = 1:numel(param_sets)
     % generative parameters
@@ -267,27 +331,62 @@ for ip = 1:numel(param_sets)
     param_fit(4,ip) = mean(cell2mat(kinf_fit(ip,:)));
 end
 
+%% Compare single parameters (generative-recovered)
 figure;
-%%
-for ip = 1:4
+legtxt = {'epsi' 'zeta' 'kini' 'kinf'};
+for ip = 1:size(param_gen,1)
+    % organize
     par_vals = unique(param_gen(ip,:)); % find all unique parameter values for comparison
     vals_fit = [];
     for par_val = par_vals
+        % exclude other parameter fits for special case: epsi == 1 since it
+        % overrides the effect of all other parameters
+        if ip == 1 && par_val >=.98
+            ind_excl = param_gen(ip,:) == par_val;
+        end
         ind_par_val = param_gen(ip,:) == par_val;
-        vals_fit = cat(1,vals_fit,[par_val mean(param_fit(ip,ind_par_val)) std(param_fit(ip,ind_par_val))/sqrt(ns)]);
+        if ip ~= 1
+            vals_fit = cat(1,vals_fit,[par_val mean(param_fit(ip,ind_par_val&~ind_excl)) std(param_fit(ip,ind_par_val&~ind_excl))/sqrt(ns)]);
+        else
+            vals_fit = cat(1,vals_fit,[par_val mean(param_fit(ip,ind_par_val)) std(param_fit(ip,ind_par_val))/sqrt(ns)]);
+        end
     end
-    scatter(vals_fit(1,:),vals_fit(2,:))
-    errorbar(
+    % plot
+    hold on;
+    errorbar(vals_fit(:,1),vals_fit(:,2),vals_fit(:,3),'o','LineWidth',2,'CapSize',0,'HandleVisibility','off');
+    set(gca,'ColorOrderIndex',ip);
+    scatter(vals_fit(:,1),vals_fit(:,2),50,'filled');
 end
-
-
+plot([0 1],[0 1],'k','LineStyle','--'); % reference line
+legend(legtxt,'Location','southeast');
+title(sprintf('Parameter recovery\nNumber of simulated agents: %d',ns));
 
 %% Check recovery (2 parameters)
 
 % Choose 2 parameters to compare 
 % 1/epsi, 2/zeta, 3/kini, 4/kinf
-xparam = 1;
-yparam = 2; 
+param_str = {'epsi','zeta','kini','kinf'};
+% compare learning noise parameter to epsilon-bias
+% organize
+i_gen = 1;
+i_rec = 2;
+par_vals = unique(param_gen(i_gen,:)); % find all unique parameter values for comparison
+vals_fit = [];
+for par_val = par_vals
+    ind_par_val = param_gen(i_gen,:) == par_val;
+    % log epsi in x; zeta in y 
+    vals_fit = cat(1,vals_fit,[par_val mean(param_fit(i_rec,ind_par_val)) std(param_fit(i_rec,ind_par_val))/sqrt(ns)]);
+end
+% plot
+hold on;
+f = errorbar(vals_fit(:,1),vals_fit(:,2),vals_fit(:,3),'o','LineWidth',2,'CapSize',0,'HandleVisibility','off');
+set(gca,'ColorOrderIndex',1);
+scatter(vals_fit(:,1),vals_fit(:,2),50,'filled');
+ylim([0 1])
+xlabel(sprintf('Generative parameter: %s',param_str{i_gen}));
+ylabel(sprintf('Recovered parameter: %s',param_str{i_rec}));
+
+
 
 
 

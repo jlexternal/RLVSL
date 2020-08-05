@@ -5,7 +5,7 @@
 
 clear all;
 addpath('./Toolboxes/'); % add path containing ANOVA function
-%% Epoch raw data and detrend
+%% Epoch raw data (w/o detrend)
 
 % subjects to be included in analysis
 nsubjtot    = 31;

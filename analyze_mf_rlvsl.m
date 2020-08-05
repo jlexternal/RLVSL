@@ -196,12 +196,11 @@ end
 
 figure(ifig);
 ifig = ifig + 1;
-for ic = 3
+for ic = 1:3
     subplot(1,3,ic);
     for iq = 1:4
         shadedErrorBar(1:nt,quarterly_acc_mean(iq,:,ic),quarterly_acc_sem(iq,:,ic),'lineprops',{'LineWidth',2,'Color',graded_rgb(ic,iq,4)});
         hold on;
-        shadedErrorBar(1:16,mean(mean(c,1),3),std(mean(c,1),1,3)/sqrt(ns),'lineprops',{'LineWidth',2,'Color',[.7 0 0]},'patchSaturation',0.075);
         ylim([.2 1]);
     end
     title(sprintf('Condition: %s',condtypes(ic)));

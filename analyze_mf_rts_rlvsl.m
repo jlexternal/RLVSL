@@ -109,7 +109,6 @@ xlim([.5 4.5]);
 legend(condtypes,'Location','southeast');
 title(sprintf('Effect of feedback value on reaction times\nError bars: SEM'),'FontSize',12);
 
-
 %% 2a. Organize: Correlation between feedback magnitude and RT before and after epiphanies within conditions
 coefs_rt_fb_epiph_rep = zeros(nsubj,2); 
 coefs_rt_fb_epiph_alt = zeros(nsubj,2); 
@@ -324,7 +323,6 @@ ylabel('Regression weight beta','FontSize',14);
 legtxt = {'unbiased','biased'};
 legend([legtxt],'Location','southeast');
 title(sprintf('Effect of feedback value on reaction times\nError bars: SEM'),'FontSize',12);
-
 
 %% 4a. Organize: RTs (z-scored) grouped on BIASED vs UNBIASED blocks
 
