@@ -1,5 +1,8 @@
+% analyse_mf_rlvsl.m
+%
 % Model-free analysis of behavior on experiment RLVSL
 %
+% Jun Seok Lee <jlexternal@gmail.com>
 clear all;
 close all;
 addpath('./Toolboxes');

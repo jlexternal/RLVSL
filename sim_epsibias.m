@@ -5,7 +5,7 @@
 % Jun Seok Lee <jlexternal@gmail.com>
 
 clc;
-clear all;
+%clear all;
 % Experimental parameters
 nb = 16;
 nt = 16;
@@ -251,49 +251,90 @@ for ip = 1:numel(param_sets)
 end
 savename = ['fit_struct_epsibias_' datestr(now,'ddmmyyyy')];
 save(savename,'out_fit','param_sets','sim_struct','epsi_fit','zeta_fit','kini_fit','kinf_fit');
+
 %% Organize fit parameters
+loadname = 'fit_struct_epsibias_complete_10082020.mat'; % Fits from 10 August 2020
+load(loadname);
 
 for ip = 1:numel(param_sets)
     % generative parameters
-    param_gen(1,ip) = param_sets{ip}(1);
-    param_gen(2,ip) = param_sets{ip}(2);
-    param_gen(3,ip) = param_sets{ip}(3);
-    param_gen(4,ip) = param_sets{ip}(4);
+    param_gen(1,ip) = param_sets{ip}(1); % epsi
+    param_gen(2,ip) = param_sets{ip}(2); % zeta
+    param_gen(3,ip) = param_sets{ip}(3); % kini
+    param_gen(4,ip) = param_sets{ip}(4); % kinf
     
     % found parameters
     param_fit(1,ip) = mean(cell2mat(epsi_fit(ip,:)));
     param_fit(2,ip) = mean(cell2mat(zeta_fit(ip,:)));
     param_fit(3,ip) = mean(cell2mat(kini_fit(ip,:)));
     param_fit(4,ip) = mean(cell2mat(kinf_fit(ip,:)));
+     
 end
+
+% epsi param least-squares fit and CI
+epsi_pars_gen = unique(param_gen(1,:));
+par_gen = param_gen(1,:);
+for i = 1:numel(epsi_pars_gen)
+    idx = par_gen == epsi_pars_gen(i);
+    mean_epsi(i) = mean(param_fit(1,idx));
+end
+[p_epsi,s_epsi] = polyfit(unique(param_gen(1,:)),mean_epsi,1);
+[y_epsi,d_epsi] = polyconf(p_epsi,[0:.1:1],s_epsi,'alpha',0.01);
 
 %% Compare single parameters (generative-recovered)
 figure;
 legtxt = {'epsi' 'zeta' 'kini' 'kinf'};
-for ip = 1:size(param_gen,1)
+% loop through each parameter
+ind_excl = false(size(param_gen(2,:)));
+for ip = 1:size(param_gen,1) 
     % organize
     par_vals = unique(param_gen(ip,:)); % find all unique parameter values for comparison
     vals_fit = [];
+    % loop through each generative value of the current parameter
     for par_val = par_vals
         % exclude other parameter fits for special case: epsi == 1 since it
         % overrides the effect of all other parameters
-        if ip == 1 && par_val >=.98
-            ind_excl = param_gen(ip,:) == par_val;
+        if ip == 1
+            if par_val >= 1
+                ind_excl = or(ind_excl,param_gen(ip,:)==par_val);
+            end
         end
+        
         ind_par_val = param_gen(ip,:) == par_val;
+        if ip == 2
+            % zeta param least-squares fit and CI
+            zeta_pars_gen = unique(param_gen(2,:));
+            par_gen = param_gen(2,:);
+            for i = 1:numel(zeta_pars_gen)
+                idx = par_gen == zeta_pars_gen(i);
+                mean_zeta(i) = mean(param_fit(2,idx&~ind_excl));
+            end
+            [p_zeta,s_zeta] = polyfit(unique(param_gen(2,~ind_excl)),mean_zeta,1);
+            [y_zeta,d_zeta] = polyconf(p_zeta,[0:.1:1],s_zeta,'alpha',0.01);
+        end
         if ip ~= 1
-            vals_fit = cat(1,vals_fit,[par_val mean(param_fit(ip,ind_par_val&~ind_excl)) std(param_fit(ip,ind_par_val&~ind_excl))/sqrt(ns)]);
+            vals_fit = cat(1,vals_fit,[par_val mean(param_fit(ip,ind_par_val&~ind_excl)) std(param_fit(ip,ind_par_val&~ind_excl))]);
         else
-            vals_fit = cat(1,vals_fit,[par_val mean(param_fit(ip,ind_par_val)) std(param_fit(ip,ind_par_val))/sqrt(ns)]);
+            vals_fit = cat(1,vals_fit,[par_val mean(param_fit(ip,ind_par_val)) std(param_fit(ip,ind_par_val))]);
         end
     end
     % plot
     hold on;
     errorbar(vals_fit(:,1),vals_fit(:,2),vals_fit(:,3),'o','LineWidth',2,'CapSize',0,'HandleVisibility','off');
     set(gca,'ColorOrderIndex',ip);
+    colorOrder = get(gca, 'ColorOrder');
+    if ip == 1
+        shadedErrorBar(0:.1:1,y_epsi,d_epsi,'lineprops',{'Color',colorOrder(ip,:),'HandleVisibility','off'},'patchSaturation',0.075);
+        set(gca,'ColorOrderIndex',ip);
+    elseif ip == 2
+        shadedErrorBar(0:.1:1,y_zeta,d_zeta,'lineprops',{'Color',colorOrder(ip,:),'HandleVisibility','off'},'patchSaturation',0.075);
+        set(gca,'ColorOrderIndex',ip);
+    end
     scatter(vals_fit(:,1),vals_fit(:,2),50,'filled');
 end
-plot([0 1],[0 1],'k','LineStyle','--'); % reference line
+plot([0 1],[0 1],'k','LineStyle',':','LineWidth',2); % reference line
+xlim([0 1]);
+ylim([0 1]);
 legend(legtxt,'Location','southeast');
 title(sprintf('Parameter recovery\nNumber of simulated agents: %d',ns));
 
@@ -304,20 +345,32 @@ title(sprintf('Parameter recovery\nNumber of simulated agents: %d',ns));
 param_str = {'epsi','zeta','kini','kinf'};
 % compare learning noise parameter to epsilon-bias
 % organize
-i_gen = 1;
+i_gen = 4;
 i_rec = 2;
 par_vals = unique(param_gen(i_gen,:)); % find all unique parameter values for comparison
 vals_fit = [];
 for par_val = par_vals
     ind_par_val = param_gen(i_gen,:) == par_val;
     % log epsi in x; zeta in y 
-    vals_fit = cat(1,vals_fit,[par_val mean(param_fit(i_rec,ind_par_val)) std(param_fit(i_rec,ind_par_val))/sqrt(ns)]);
+    vals_fit = cat(1,vals_fit,[par_val mean(param_fit(i_rec,ind_par_val)) std(param_fit(i_rec,ind_par_val))]);
 end
+
+% correlation analysis
+[r,p] = corr(param_gen(i_gen,:)',param_fit(i_rec,:)');
+% line of best fit + 99% CI
+[p2,s2] = polyfit(vals_fit(:,1),vals_fit(:,2),1);
+[y2,d2] = polyconf(p2,[0:.1:1],s2,'alpha',0.01);
+
 % plot
 hold on;
+set(gca,'ColorOrderIndex',5);
 f = errorbar(vals_fit(:,1),vals_fit(:,2),vals_fit(:,3),'o','LineWidth',2,'CapSize',0,'HandleVisibility','off');
-set(gca,'ColorOrderIndex',1);
+set(gca,'ColorOrderIndex',5);
 scatter(vals_fit(:,1),vals_fit(:,2),50,'filled');
+colorOrder = get(gca, 'ColorOrder');
+shadedErrorBar(0:.1:1,y2,d2,'lineprops',{'Color',colorOrder(5,:),'HandleVisibility','off'},'patchSaturation',0.075);
+title(sprintf('Correlation: rho: %.04f; p=%.04f',r,p));
+
 ylim([0 1])
 xlabel(sprintf('Generative parameter: %s',param_str{i_gen}));
 ylabel(sprintf('Recovered parameter: %s',param_str{i_rec}));

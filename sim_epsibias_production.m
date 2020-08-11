@@ -21,7 +21,7 @@ fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
 % Assumptions of the model
 sbias_cor = true;   % 1st-choice bias toward the correct structure
 sbias_ini = true;   % KF means biased toward the correct structure
-cscheme = 'qvs';      % 'arg'-argmax; 'qvs'-softmax; 'ths'-Thompson sampling
+cscheme = 'ths';      % 'arg'-argmax; 'qvs'-softmax; 'ths'-Thompson sampling
 % Model parameters
 ns      = 27;       % Number of simulated agents to generate per given parameter
 % KF learning parameters

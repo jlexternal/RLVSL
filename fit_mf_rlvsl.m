@@ -1,7 +1,16 @@
 % fit_mf_rlvsl.m
+%
+% Model-free exponential function fits onto RLVSL subject data
+%
+% Jun Seok Lee <jlexternal@gmail.com>
 
 clear all;
 close all;
+
+% Type of fit
+indfit  = true;     % toggle for individual subject fits
+jkfit   = false;    % toggle for jackknifed fits   
+
 ifig = 1;
 nsubjtot    = 31;
 excluded    = [1];
@@ -118,8 +127,7 @@ for ic = 1:nc
         
         
         % standard individual subj fit procedure
-        stndfit = true;
-        if stndfit 
+        if indfit 
             for isubj = 1:nsubj
                 ydata = mean(ind_subj_quarterly_acc_mean(isubj,:,ic,iq),1);
                 F = @(x) sum((x(1)-x(2)*exp(-(xdata)/x(3)) - ydata).^2);
@@ -132,8 +140,7 @@ for ic = 1:nc
         end
         
         % jackknife procedure
-        jackknifing = false;
-        if jackknifing
+        if jkfit
             for jsubj = 1:nsubj
                 subjs = setdiff(1:nsubj,jsubj);
                 ydata = mean(ind_subj_quarterly_acc_mean(subjs,:,ic,iq),1);
@@ -176,8 +183,8 @@ for ic = 1:nc
     end
 end
 
-%% Plot: Exponential fits by quarter (standard fit)
-if stndfit
+%% Plot: Exponential fits by quarter (stanidard fit)
+if indfit
 figure(ifig);
 ifig = ifig + 1;
 xs = 0:.25:15;
@@ -210,8 +217,8 @@ for ic = 1:3
     hold off;
 end
 end
-%% Plot: Exponential fits by condition (standard fit)
-if stndfit
+%% Plot: Exponential fits by condition (individual fit)
+if indfit
 figure(ifig);
 ifig = ifig + 1;
 xs = 0:.25:15;
@@ -284,7 +291,7 @@ for ic = 1:3
 end
 
 %% Plot: Exponential fits by condition (jackknifed fit)
-if jackknifing
+if jkfit
 figure(ifig);
 ifig = ifig + 1;
 for ic = 1:3
@@ -324,7 +331,7 @@ end
 end
 
 %% Plot: Exponential fit parameters by condition 
-if jackknifing
+if jkfit
 as_jk = nan(nsubj,nq,nc);
 pr_jk = nan(nsubj,nq,nc);
 tc_jk = nan(nsubj,nq,nc);
