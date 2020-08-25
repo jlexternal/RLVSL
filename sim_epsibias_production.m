@@ -63,11 +63,11 @@ if ~ismember(cscheme,{'arg','qvs','ths'})
 end
 
 % Organize parameter sets for simulation
-epsis = linspace(0,.9,5);
-zetas = [0:.1:.5]+eps;
+epsis = .2;%linspace(0,.9,5);
+zetas = .2;[0:.1:.5]+eps;
 kinis = [.75 .9];%.5:.1:1;
 kinfs = [.1 .2];%0:.1:.4;
-thetas = [0 .2 .4 .6 .8 1];
+thetas = 1; %[0 .2 .4 .6 .8 1];
 param_sets = {};
 
 % reparametrizing theta for the different choice schemes
@@ -253,6 +253,7 @@ for ip = 1:numel(param_sets)
     sim_struct(out_ctr).kinf = kinf;
     sim_struct(out_ctr).theta = theta;
     sim_struct(out_ctr).ksi  = ksi;
+    sim_struct(out_ctr).ms   = r_mu;
     sim_struct(out_ctr).vs   = vs;
     sim_struct(out_ctr).resp = rt;
     sim_struct(out_ctr).rew_seen = rew_c;
@@ -272,7 +273,7 @@ for ip = 1:numel(param_sets)
         ylim([.4 1]);
     end
 end
-clearvars -except param_sets sim_struct ns
+clearvars -except param_sets sim_struct ns 
 
 %% Parameter recovery in BATCHES (divide parameter sets into separate "jobs")
 if ~bsxfun(@eq,numel(sim_struct),numel(param_sets))
@@ -311,6 +312,7 @@ for ip = idx_batch(ibatch,:)
         cfg.resp = sim_struct(ip).resp(:,:,isim);
         cfg.rt = sim_struct(ip).rew_seen(:,:,isim);
         cfg.vs = sim_struct(ip).vs;
+        cfg.ms = sim_struct(ip).ms;
         cfg.nsmp = 1e3;
         cfg.lstruct = 'sym'; % assume symmetric action values
         cfg.verbose = true; % plot fitting information

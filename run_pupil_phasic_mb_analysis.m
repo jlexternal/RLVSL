@@ -1,6 +1,6 @@
 % run_mb_pupil_phasic_analysis.m
 % 
-% Usage: Phasic pupil analysis (post-detrending analysis) on model-based variables
+% Usage: Phasic pupil analysis (detrended pupil analysis) on model-based variables
 %        (from best-fitting parameters of a given model).
 %
 % Jun Seok Lee <jlexternal@gmail.com>

@@ -1,4 +1,4 @@
-function [out] = fit_noisyKF_epsibias(cfg)
+function [out] = fit_noisyKF_thombias(cfg)
 
 % check configuration structure
 if ~isfield(cfg,'rt')
@@ -19,8 +19,8 @@ if ~isfield(cfg,'lscheme')
     warning('Assuming independence between action values.');
 end
 if ~isfield(cfg,'cscheme')
-    cfg.cscheme = 'qvs'; % qvs:Q-value sampling or ths:Thompson sampling
-    warning('Assuming Q-value sampling.');
+    cfg.cscheme = 'ths'; % qvs:Q-value sampling or ths:Thompson sampling
+    warning('Assuming Thompson sampling.');
 end
 if ~isfield(cfg,'sbias_ini')
     cfg.sbias_ini = false;
@@ -71,6 +71,9 @@ ntrl = nb*nt; % total number of trials
 nsmp = cfg.nsmp; % number of samples
 nres = cfg.nres; % number of re-samples for bootstrapping
 minl = 0.5/ntrl; % minimum value for filtered likelihoods
+
+% changed to 0 (potential bug point)
+epsi = 0.5/ntrl; % minimum value for filtered likelihoods
 verbose = cfg.verbose; % display level
 
 % reshape experiment data
@@ -92,6 +95,7 @@ sbias_cor = cfg.sbias_cor; % structure bias toward correct action?
 % reparameterization functions
 fk = @(v)1./(1+exp(+0.4486-log2(v/vs)*0.6282)).^0.5057;
 fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
+delta_lim = [-.2 .2]; % lower and upper bounds of true delta parameter
 
 % define model parameters
 pnam = {}; % name
@@ -152,8 +156,8 @@ switch cscheme
         pplb(1,5) = gaminv(0.1587,4,0.5);
         ppub(1,5) = gaminv(0.8413,4,0.5);
 end
-% 6/ fraction of trials with blind choices based on structure
-pnam{1,6} = 'epsi';
+% 6/ amount of bias toward the correct structure
+pnam{1,6} = 'delta';
 pmin(1,6) = 0;
 pmax(1,6) = 1;
 pfun{1,6} = @(x)betapdf(x,1,1);
@@ -312,6 +316,8 @@ out.vt = permute(reshape(vt_hat,[nt,nb,2]),[2,1,3]);
         end
     end
 
+    %%%% need to change to remove epsi from ll calculation %%%%
+
     function [ll,ll_sd] = getll(varargin)
         % compute response probability
         p = getp(varargin{:});
@@ -320,19 +326,22 @@ out.vt = permute(reshape(vt_hat,[nt,nb,2]),[2,1,3]);
         for ires = 1:nres
             jres = randsample(nsmp,nsmp,true);
             pres = mean(p(:,jres),2);
-            lres(ires) = ...
-                sum(log(max(pres(resp == 1),minl)))+ ...
-                sum(log(max(1-pres(resp == 2),minl)));
+            % bootstrapped log-likelihood
+            lres(ires) = sum(log(max(pres(resp == 1),minl)))+ ...
+                         sum(log(max(1-pres(resp ~= 1),minl)));
         end
-        ll_sd = max(std(lres),1e-6);
+        ll_sd = max(std(lres),1e-6); % sd of the bootstrapped ll
         % compute log-likelihood estimate
-        p = mean(p,2);
-        ll = ...
-            sum(log(max(p(resp == 1),minl)))+ ...
-            sum(log(max(1-p(resp == 2),minl)));
+        p = mean(p,2);  % mean response probability from all particles
+        ll = sum(log(max(p(resp == 1),minl)))+ ...
+             sum(log(max(1-p(resp ~= 1),minl)));
     end
 
-    function [pt,mt,vt] = getp(kini,kinf,zeta,ksi,theta,epsi)
+    function [pt,mt,vt] = getp(kini,kinf,zeta,ksi,theta,delta)
+        % reparametrize delta
+        delta = (delta_lim(2)-delta_lim(1))*delta+delta_lim(1);
+        fprintf('delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
+                delta,zeta,kini,kinf,theta);
         % express softmax temperature as selection noise
         ssel = pi/sqrt(6)*theta;
         % run particle filter
@@ -347,14 +356,13 @@ out.vt = permute(reshape(vt_hat,[nt,nb,2]),[2,1,3]);
                     % toward correct action
                     rbias = 1;
                 else
-                    % toward first response
                     rbias = resp(itrl);
                 end
                 % initialize posterior means and variances
                 if sbias_ini
                     % initialize biased means
-                    mt(itrl,rbias,:) = ms;
-                    mt(itrl,3-rbias,:) = 1-ms;
+                    mt(itrl,1,:) = .5+delta;
+                    mt(itrl,2,:) = .5;
                 else
                     % initialize unbiased means
                     mt(itrl,:,:) = 0.5;
@@ -363,10 +371,10 @@ out.vt = permute(reshape(vt_hat,[nt,nb,2]),[2,1,3]);
                 % choose first response
                 if sbias_cor
                     % by sampling
-                    md = reshape(mt(itrl,1,:)-mt(itrl,2,:),[1,nsmp]);
+                    md = reshape((mt(itrl,1,:)+delta)-mt(itrl,2,:),[1,nsmp]);
                     sd = sqrt(sum(vt(itrl,:)));
                     pd = 1-normcdf(0,md,sd);
-                    pt(itrl,:) = (1-epsi)*pd+epsi;
+                    pt(itrl,:) = pd;
                 else
                     % same response as subject
                     pt(itrl,:) = rbias == 1;
@@ -411,40 +419,30 @@ out.vt = permute(reshape(vt_hat,[nt,nb,2]),[2,1,3]);
                     md = reshape(mt(itrl,1,:)-mt(itrl,2,:),[1,nsmp]);
                     sd = sqrt(sum(st.^2,1)+ssel^2);
                 case 'ths' % Thompson sampling
-                    md = reshape((mt(itrl,1,:)-mt(itrl,2,:))/sqrt(sum(vt(itrl,:))),[1,nsmp]);
+                    md = reshape(((mt(itrl,1,:)+delta)-mt(itrl,2,:))/sqrt(sum(vt(itrl,:))),[1,nsmp]);
                     sd = sqrt(sum(st.^2,1)/sum(vt(itrl,:))+ssel^2);
             end
-            % sample trial types
-            isl = rand(1,nsmp) < epsi; % choices based on structure learning
-            irl = ~isl; % choices based on reinforcement learning
-            % update trials with choices based on structure learning
-            if nnz(isl) > 0
-                % compute response probabilities
-                pt(itrl,isl) = rbias == 1;
-                % resample means without conditioning upon response
-                mt(itrl,:,isl) = normrnd( ...
-                    reshape(mt(itrl,:,isl),[2,nnz(isl)]), ...
-                    st(:,isl));
-            end
-            % update trials with choices based on reinforcement learning
-            if nnz(irl) > 0
-                % compute response probabilities
-                pt(itrl,irl) = 1-normcdf(0,md(irl),sd(irl));
-                % resample means conditioned upon response
-                if zeta > 0 || ksi > 0
-                    switch cscheme
-                        case 'qvs' % Q-value sampling
-                            mt(itrl,:,irl) = resample( ...
-                                reshape(mt(itrl,:,irl),[2,nnz(irl)]), ...
-                                st(:,irl),ssel,resp(itrl));
-                        case 'ths' % Thompson sampling
-                            mt(itrl,:,irl) = resample( ...
-                                reshape(mt(itrl,:,irl),[2,nnz(irl)]), ...
-                                st(:,irl),ssel*sqrt(sum(vt(itrl,:))),resp(itrl));
-                    end
+            % compute response probabilities
+            pt(itrl,:) = 1-normcdf(0,md,sd);
+            % resample means conditioned upon response
+            if zeta > 0 || ksi > 0
+                switch cscheme
+                    case 'qvs' % Q-value sampling
+                        mt(itrl,:,:) = resample( ...
+                            reshape(mt(itrl,:,:),[2,nsmp]),...
+                            st(:,:),ssel,resp(itrl));
+                    case 'ths' % Thompson sampling
+                        mt(itrl,:,:) = resample( ...
+                            reshape([mt(itrl,1,:)+delta mt(itrl,2,:)],[2,nsmp]),...
+                            st(:,:),ssel*sqrt(sum(vt(itrl,:))),resp(itrl));
                 end
             end
         end
+        
+        resp_conv = resp;
+        resp_conv(resp_conv ~= 1) = 0;
+        plot(resp_conv-mean(pt,2));
+        pause(eps);
     end
 end
 

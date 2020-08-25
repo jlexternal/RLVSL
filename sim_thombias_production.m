@@ -21,6 +21,8 @@ fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
 % Assumptions of the model
 sbias_cor = false;   % 1st-choice bias toward the correct structure
 sbias_ini = false;   % KF means biased toward the correct structure
+
+
 % Model parameters
 ns      = 27;       % Number of simulated agents to generate per given parameter
 % KF learning parameters
@@ -31,7 +33,6 @@ zeta    = 0.3+eps;  % Learning noise scale
 ksi     = 0.0+eps;  % Learning noise constant
 
 %%%% Need to play with this a bit and figure out how to parametrize it
-
 % Thompson-sampling bias parameter
 delta   = 0.2;      % 
 
@@ -49,7 +50,6 @@ params_gen.ksi  = ksi;
 
 % Simulation settings
 sameexpe = false;   % true if all sims see the same reward scheme
-nexp     = 10;      % number of different reward schemes to try per given parameter set
 
 sim_struct = struct;
 
@@ -65,12 +65,12 @@ else
     disp('Assuming NO initial means bias!');
 end
 
-% Organize parameter sets for simulation
-deltas = linspace(0,0.2,12);
-zetas = [0:.1:.5]+eps;
-kinis = [.75 .9];%.5:.1:1;
-kinfs = [.1 .2];%0:.1:.4;
-thetas = 0; %[0 .2 .4 .6 .8 1];
+% Organize parameter values into sets for simulation
+deltas = linspace(0,0.2,4);
+zetas = [0:.1:.4]+1e-6;
+kinis = [0.75];%.5:.1:1;
+kinfs = [0.10];%0:.1:.4;
+thetas = [0 .2 .4 .6 1 ]+eps;
 param_sets = {};
 
 % define parameter sets
@@ -90,6 +90,7 @@ end
 
 out_ctr = 0;
 for ip = 1:numel(param_sets)
+    fprintf('Simulating parameter set %d of %d\n',ip,numel(param_sets));
     delta = param_sets{ip}(1);
     zeta = param_sets{ip}(2);
     kini = param_sets{ip}(3);
@@ -135,11 +136,11 @@ for ip = 1:numel(param_sets)
                     rb = double(normrnd(.5+delta,r_sd,ns,1) >= .5);
                     rb(rb~=1) = 2;
                 end
+                ind_rb = rb == 1;
                 % initialize KF means and variances
                 if sbias_ini
                     % initial tracking mean biased based on the delta parameter
-                    ind_rb = rb == 1;
-                    mt(ib,it,1,ind_rb)  = .5+delta; 
+                    mt(ib,it,1,ind_rb)  = .5+delta;
                     mt(ib,it,1,~ind_rb) = .5-delta;
                     mt(ib,it,2,:) = 1-mt(ib,it,1,:);
                 else
@@ -162,7 +163,7 @@ for ip = 1:numel(param_sets)
                 rt(rt==0) = 2;
                 continue;
             end
-%            rb(:) = 1; % this doesn't do anything... I THINK 
+%            rb(:) = 1; % debug (ignore)
 
             % update Kalman gain
             kt = reshape(vt(ib,it-1,:,:)./(vt(ib,it-1,:,:)+vs),[2 ns]);
@@ -208,12 +209,15 @@ for ip = 1:numel(param_sets)
             % extract choice from probabilities
             rt(ib,it,:) = round(pt(ib,it,:));
             rt(rt==0) = 2;
-            % Thompson resampling
+            % resampling
             if zeta > 0 || ksi > 0
-               mt(ib,it,:,:) = resample(reshape([mt(ib,it,1,:)+delta mt(ib,it,2,:)],[2,ns]),...
-                                          reshape(st(ib,it,:,:),[2,ns]),...
-                                          reshape(ssel*sqrt(sum(vt(ib,it,:,:),3)),[1 ns]),... % width increase due to KF variance
-                                          reshape(rt(ib,it,:),[1 ns]));
+                delta_vec1 = reshape(double(ind_rb),size(mt(ib,it,1,:)));
+                delta_vec2 = reshape(double(~ind_rb),size(mt(ib,it,1,:)));
+                %mt(ib,it,:,:) = resample(reshape([mt(ib,it,1,:)+delta mt(ib,it,2,:)],[2,ns]),...
+                mt(ib,it,:,:) = resample(reshape([mt(ib,it,1,:)+delta*delta_vec1 mt(ib,it,2,:)+delta*delta_vec2],[2,ns]),...
+                                         reshape(st(ib,it,:,:),[2,ns]),...
+                                         reshape(ssel*sqrt(sum(vt(ib,it,:,:),3)),[1 ns]),... % width increase due to KF variance
+                                         reshape(rt(ib,it,:),[1 ns]));
             end
         end
     end
@@ -230,7 +234,7 @@ for ip = 1:numel(param_sets)
     sim_struct(out_ctr).rew_seen = rew_c;
     
     % plot simulation data
-    if true
+    if false
         rt(rt==2)=0;
         figure(1);
         hold on;
@@ -241,7 +245,7 @@ for ip = 1:numel(param_sets)
         xlabel('trial number');
         ylabel('proportion correct');
         title(sprintf('Params: kini:%0.2f, kinf: %0.2f, zeta: %0.2f, theta: %0.2f, delta: %0.2f\n nsims:%d',kini,kinf,zeta,theta,delta,ns));
-        ylim([.4 1]);
+     %   ylim([.4 1]);
     end
 end
 %clearvars -except param_sets sim_struct ns
@@ -252,7 +256,7 @@ if ~bsxfun(@eq,numel(sim_struct),numel(param_sets))
 end
 addpath('./vbmc');
 
-nbatch     = 4; % number of batches 
+nbatch     = 1; % number of batches 
 % holds the index range of the parameters for each batch
 idx_batch   = nan(nbatch,2);
 % number of parameter sets per batch
@@ -267,30 +271,40 @@ for ibatch = 1:nbatch
     end
 end
 
-ibatch_run = 3; % choose which batch to recover
+ibatch_run = 1; % choose which batch to recover
 if ibatch_run > nbatch
     error('The chosen batch number exceeds the number of batches defined!')
 end
 % Run parameter recovery for the chosen batch
+ibatch = 1;
 for ip = idx_batch(ibatch,:)
-    epsi = param_sets{ip}(1);
+    delta = param_sets{ip}(1);
     zeta = param_sets{ip}(2);
     kini = param_sets{ip}(3);
     kinf = param_sets{ip}(4);
+    theta = param_sets{ip}(5);
     
     for isim = 1:ns
+        
+        fprintf('Generative parameters:/n');
+        fprintf('delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
+                delta,zeta,kini,kinf,theta);
+        fprintf('Testing parameters:\n');
         cfg = [];
         cfg.resp = sim_struct(ip).resp(:,:,isim);
         cfg.rt = sim_struct(ip).rew_seen(:,:,isim);
+        cfg.ms = .55;
         cfg.vs = sim_struct(ip).vs;
         cfg.nsmp = 1e3;
         cfg.lstruct = 'sym'; % assume symmetric action values
+        cfg.sbias_cor = false;
         cfg.verbose = true; % plot fitting information
         cfg.ksi = 0; % assume no constant term in learning noise
+        cfg.theta = 0; % fix to argmax choice
 
-        out_fit{ip,isim} = fit_noisyKF_epsibias(cfg); % fit the model to data
+        out_fit{ip,isim} = fit_noisyKF_thombias(cfg); % fit the model to data
         
-        epsi_fit{ip,isim} = out_fit{ip,isim}.epsi;
+        delta_fit{ip,isim} = out_fit{ip,isim}.delta;
         zeta_fit{ip,isim} = out_fit{ip,isim}.zeta;
         kini_fit{ip,isim} = out_fit{ip,isim}.kini;
         kinf_fit{ip,isim} = out_fit{ip,isim}.kinf;
@@ -304,7 +318,7 @@ if ~bsxfun(@eq,numel(sim_struct),numel(param_sets))
 end
 addpath('./vbmc')
 for ip = 1:numel(param_sets)
-    epsi = param_sets{ip}(1);
+    delta = param_sets{ip}(1);
     zeta = param_sets{ip}(2);
     kini = param_sets{ip}(3);
     kinf = param_sets{ip}(4);
@@ -313,15 +327,17 @@ for ip = 1:numel(param_sets)
         cfg = [];
         cfg.resp = sim_struct(ip).resp(:,:,isim);
         cfg.rt = sim_struct(ip).rew_seen(:,:,isim);
+        cfg.ms = .55;
         cfg.vs = sim_struct(ip).vs;
         cfg.nsmp = 1e3;
-        cfg.lstruct = 'sym'; % assume symmetric action values
+        cfg.lstruct = 'sym'; % assume symmetric action values\
+        cfg.sbias_cor = false;
         cfg.verbose = true; % plot fitting information
         cfg.ksi = 0; % assume no constant term in learning noise
 
         out_fit{ip,isim} = fit_noisyKF_epsibias(cfg); % fit the model to data
         
-        epsi_fit{ip,isim} = out_fit{ip,isim}.epsi;
+        delta_fit{ip,isim} = out_fit{ip,isim}.delta;
         zeta_fit{ip,isim} = out_fit{ip,isim}.zeta;
         kini_fit{ip,isim} = out_fit{ip,isim}.kini;
         kinf_fit{ip,isim} = out_fit{ip,isim}.kinf;
@@ -347,6 +363,10 @@ for ip = 1:numel(param_sets)
 end
 
 %% Compare single parameters (generative-recovered)
+
+
+%still needs to be adapted for the delta parameter instead of the epsi
+
 figure;
 legtxt = {'epsi' 'zeta' 'kini' 'kinf'};
 for ip = 1:size(param_gen,1)
@@ -423,9 +443,17 @@ function [x] = tnormrnd(m,s,d)
 % sample from truncated normal distribution
 for id = 1:numel(d)
     if d(id) == 1
-        x(id) = +rpnormv(+m(id),s(id));
+        if m(id) >= 0 
+            x(id) = +rpnormv(+m(id),s(id));
+        else
+            x(id) = +rpnormv(-m(id),s(id));
+        end
     else
-        x(id) = -rpnormv(-m(id),s(id));
+        if m(id) >= 0
+            x(id) = -rpnormv(m(id),s(id));
+        else
+            x(id) = -rpnormv(-m(id),s(id));
+        end
     end
 end
 end
