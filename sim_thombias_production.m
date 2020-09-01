@@ -19,8 +19,8 @@ fk = @(v)1./(1+exp(+0.4486-log2(v/vs)*0.6282)).^0.5057;
 fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
 
 % Assumptions of the model
-sbias_cor = false;   % 1st-choice bias toward the correct structure
-sbias_ini = false;   % KF means biased toward the correct structure
+sbias_cor = false;  % 1st-choice bias toward the correct structure
+sbias_ini = false;  % KF means biased toward the correct structure
 
 
 % Model parameters
@@ -66,11 +66,11 @@ else
 end
 
 % Organize parameter values into sets for simulation
-deltas = linspace(0,0.2,4);
-zetas = [0:.1:.4]+1e-6;
-kinis = [0.75];%.5:.1:1;
+deltas = .05; %linspace(0,0.2,4);
+zetas = .3; %[0:.1:.4]+1e-6;
+kinis = [0.90];%.5:.1:1;
 kinfs = [0.10];%0:.1:.4;
-thetas = [0 .2 .4 .6 1 ]+eps;
+thetas = 0; %[0 .2 .4 .6 1 ]+eps;
 param_sets = {};
 
 % define parameter sets
@@ -234,7 +234,7 @@ for ip = 1:numel(param_sets)
     sim_struct(out_ctr).rew_seen = rew_c;
     
     % plot simulation data
-    if false
+    if true
         rt(rt==2)=0;
         figure(1);
         hold on;
@@ -245,7 +245,6 @@ for ip = 1:numel(param_sets)
         xlabel('trial number');
         ylabel('proportion correct');
         title(sprintf('Params: kini:%0.2f, kinf: %0.2f, zeta: %0.2f, theta: %0.2f, delta: %0.2f\n nsims:%d',kini,kinf,zeta,theta,delta,ns));
-     %   ylim([.4 1]);
     end
 end
 %clearvars -except param_sets sim_struct ns
@@ -286,10 +285,8 @@ for ip = idx_batch(ibatch,:)
     
     for isim = 1:ns
         
-        fprintf('Generative parameters:/n');
-        fprintf('delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
+        fprintf('Generative parameters: delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
                 delta,zeta,kini,kinf,theta);
-        fprintf('Testing parameters:\n');
         cfg = [];
         cfg.resp = sim_struct(ip).resp(:,:,isim);
         cfg.rt = sim_struct(ip).rew_seen(:,:,isim);
@@ -308,6 +305,11 @@ for ip = idx_batch(ibatch,:)
         zeta_fit{ip,isim} = out_fit{ip,isim}.zeta;
         kini_fit{ip,isim} = out_fit{ip,isim}.kini;
         kinf_fit{ip,isim} = out_fit{ip,isim}.kinf;
+        
+        delta_rp = .4*delta_fit{ip,isim}-.2;% reparametrized from fitted transform delta
+        
+        fprintf('Recovered parameters: delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
+                delta_rp,zeta_fit{ip,isim},kini_fit{ip,isim},kinf_fit{ip,isim},cfg.theta);
     end
 end
 

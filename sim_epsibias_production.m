@@ -21,7 +21,7 @@ fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
 % Assumptions of the model
 sbias_cor = true;   % 1st-choice bias toward the correct structure
 sbias_ini = true;   % KF means biased toward the correct structure
-cscheme = 'ths';      % 'arg'-argmax; 'qvs'-softmax; 'ths'-Thompson sampling
+cscheme = 'qvs';      % 'arg'-argmax; 'qvs'-softmax; 'ths'-Thompson sampling
 % Model parameters
 ns      = 27;       % Number of simulated agents to generate per given parameter
 % KF learning parameters
@@ -63,17 +63,15 @@ if ~ismember(cscheme,{'arg','qvs','ths'})
 end
 
 % Organize parameter sets for simulation
-epsis = .2;%linspace(0,.9,5);
-zetas = .2;[0:.1:.5]+eps;
-kinis = [.75 .9];%.5:.1:1;
-kinfs = [.1 .2];%0:.1:.4;
-thetas = 1; %[0 .2 .4 .6 .8 1];
+epsis = .5; %linspace(0,.9,5);
+zetas = .2;%[0:.1:.5]+eps;
+kinis = [.9];%.5:.1:1;
+kinfs = [.1];%0:.1:.4;
+thetas = 0; %[0 .2 .4 .6 .8 1];
 param_sets = {};
 
 % reparametrizing theta for the different choice schemes
 switch cscheme
-    case 'arg' % argmax
-        thetas = 0;
     case 'qvs' % regular softmax
         thetas = thetas;
     case 'ths' % Thompson sampling
@@ -97,6 +95,7 @@ end
 
 out_ctr = 0;
 for ip = 1:numel(param_sets)
+    fprintf('Simulating parameter set %d of %d\n',ip,numel(param_sets));
     epsi = param_sets{ip}(1);
     zeta = param_sets{ip}(2);
     kini = param_sets{ip}(3);
@@ -273,7 +272,7 @@ for ip = 1:numel(param_sets)
         ylim([.4 1]);
     end
 end
-clearvars -except param_sets sim_struct ns 
+clearvars -except param_sets sim_struct ns sbias_cor sbias_ini
 
 %% Parameter recovery in BATCHES (divide parameter sets into separate "jobs")
 if ~bsxfun(@eq,numel(sim_struct),numel(param_sets))
@@ -281,7 +280,7 @@ if ~bsxfun(@eq,numel(sim_struct),numel(param_sets))
 end
 addpath('./vbmc');
 
-nbatch     = 4; % number of batches 
+nbatch     = 1; % number of batches 
 % holds the index range of the parameters for each batch
 idx_batch   = nan(nbatch,2);
 % number of parameter sets per batch
@@ -296,7 +295,7 @@ for ibatch = 1:nbatch
     end
 end
 
-ibatch_run = 3; % choose which batch to recover
+ibatch_run = 1; % choose which batch to recover
 if ibatch_run > nbatch
     error('The chosen batch number exceeds the number of batches defined!')
 end
@@ -306,8 +305,11 @@ for ip = idx_batch(ibatch,:)
     zeta = param_sets{ip}(2);
     kini = param_sets{ip}(3);
     kinf = param_sets{ip}(4);
+    theta = param_sets{ip}(5);
     
     for isim = 1:ns
+        fprintf('Generative parameters: epsi: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
+                epsi,zeta,kini,kinf,theta);
         cfg = [];
         cfg.resp = sim_struct(ip).resp(:,:,isim);
         cfg.rt = sim_struct(ip).rew_seen(:,:,isim);
@@ -317,6 +319,8 @@ for ip = idx_batch(ibatch,:)
         cfg.lstruct = 'sym'; % assume symmetric action values
         cfg.verbose = true; % plot fitting information
         cfg.ksi = 0; % assume no constant term in learning noise
+        cfg.sbias_cor = sbias_cor;
+        cfg.sbias_ini = sbias_ini;
 
         out_fit{ip,isim} = fit_noisyKF_epsibias(cfg); % fit the model to data
         
@@ -324,6 +328,9 @@ for ip = idx_batch(ibatch,:)
         zeta_fit{ip,isim} = out_fit{ip,isim}.zeta;
         kini_fit{ip,isim} = out_fit{ip,isim}.kini;
         kinf_fit{ip,isim} = out_fit{ip,isim}.kinf;
+        
+        fprintf('epsi: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
+                epsi_fit{ip,isim},zeta_fit{ip,isim},kini_fit{ip,isim},kinf_fit{ip,isim},out_fit{ip,isim}.theta);     
     end
 end
 
@@ -362,18 +369,18 @@ save(savename,'out_fit','param_sets','sim_struct','epsi_fit','zeta_fit','kini_fi
 
 %% Organize fit parameters
 
-for ip = 1:numel(param_sets)
+for ipset = 1:numel(param_sets)
     % generative parameters
-    param_gen(1,ip) = param_sets{ip}(1);
-    param_gen(2,ip) = param_sets{ip}(2);
-    param_gen(3,ip) = param_sets{ip}(3);
-    param_gen(4,ip) = param_sets{ip}(4);
+    param_gen(1,ipset) = param_sets{ipset}(1);
+    param_gen(2,ipset) = param_sets{ipset}(2);
+    param_gen(3,ipset) = param_sets{ipset}(3);
+    param_gen(4,ipset) = param_sets{ipset}(4);
     
-    % found parameters
-    param_fit(1,ip) = mean(cell2mat(epsi_fit(ip,:)));
-    param_fit(2,ip) = mean(cell2mat(zeta_fit(ip,:)));
-    param_fit(3,ip) = mean(cell2mat(kini_fit(ip,:)));
-    param_fit(4,ip) = mean(cell2mat(kinf_fit(ip,:)));
+    % found parameter means
+    param_fit(1,ipset) = mean(cell2mat(epsi_fit(ipset,:)));
+    param_fit(2,ipset) = mean(cell2mat(zeta_fit(ipset,:)));
+    param_fit(3,ipset) = mean(cell2mat(kini_fit(ipset,:)));
+    param_fit(4,ipset) = mean(cell2mat(kinf_fit(ipset,:)));
 end
 
 %% Compare single parameters (generative-recovered)
@@ -388,6 +395,8 @@ for ip = 1:size(param_gen,1)
         % overrides the effect of all other parameters
         if ip == 1 && par_val >=.98
             ind_excl = param_gen(ip,:) == par_val;
+        else
+            ind_excl = zeros(size(param_gen(ip,:)));
         end
         ind_par_val = param_gen(ip,:) == par_val;
         if ip ~= 1

@@ -1,4 +1,4 @@
-function [out] = fit_noisyKF_epsibias(cfg)
+function [out] = fit_noisyKF_epsibias_old(cfg)
 
 % check configuration structure
 if ~isfield(cfg,'rt')

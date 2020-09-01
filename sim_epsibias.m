@@ -31,8 +31,8 @@ params_gen.kinf = kinf;
 params_gen.zeta = zeta;
 params_gen.ksi  = ksi;
 
-sbias_cor = true;   % bias toward the correct structure
-sbias_ini = true;   % initial biased means
+sbias_cor = false;   % bias toward the correct structure
+sbias_ini = false;   % initial biased means
 
 % Simulation settings
 sameexpe = false;   % true if all sims see the same reward scheme
@@ -43,10 +43,10 @@ sim_struct = struct;
 %% Run simulation
 
 % Organize parameter sets for simulation
-epsis = linspace(0,.9,5);
-zetas = [0:.1:.5]+eps;
-kinis = [.75 .9];%.5:.1:1;
-kinfs = [.1 .2];%0:.1:.4;
+epsis = .7; %linspace(0,.9,5);
+zetas = .2; %[0:.1:.5]+eps;
+kinis = [.9];%.5:.1:1;
+kinfs = [.1];%0:.1:.4;
 param_sets = {};
 p_ctr = 0;
 for epsi = epsis
@@ -62,6 +62,7 @@ end
 
 out_ctr = 0;
 for ip = 1:numel(param_sets)
+    fprintf('Simulating parameter set %d of %d\n',ip,numel(param_sets));
     epsi = param_sets{ip}(1);
     zeta = param_sets{ip}(2);
     kini = param_sets{ip}(3);
@@ -181,6 +182,10 @@ for ip = 1:numel(param_sets)
             % extract choice from probabilities
             rt(ib,it,:) = round(pt(ib,it,:));
             rt(rt==0) = 2;
+            
+            %test
+            
+            %{
             % resampling w/o conditioning on response
             mt(ib,it,:,isl) = normrnd(mt(ib,it,:,isl),st(ib,it,:,isl));
             % resampling conditioning on response
@@ -189,6 +194,7 @@ for ip = 1:numel(param_sets)
                                            reshape(st(ib,it,:,irl),[2,nnz(irl)]),...
                                            ssel,reshape(rt(ib,it,irl),[1 numel(irl(irl==1))]));
             end
+            %}
         end
     end
     
@@ -198,12 +204,13 @@ for ip = 1:numel(param_sets)
     sim_struct(out_ctr).kini = kini;
     sim_struct(out_ctr).kinf = kinf;
     sim_struct(out_ctr).ksi  = ksi;
+    sim_struct(out_ctr).ms   = r_mu;
     sim_struct(out_ctr).vs   = vs;
     sim_struct(out_ctr).resp = rt;
     sim_struct(out_ctr).rew_seen = rew_c;
     
     % plot simulation data
-    if false
+    if true
         rt(rt==2)=0;
         figure(1);
         hold on;
@@ -217,7 +224,7 @@ for ip = 1:numel(param_sets)
         ylim([.4 1]);
     end
 end
-clearvars -except param_sets sim_struct ns
+clearvars -except param_sets sim_struct ns sbias_cor sbias_ini
 
 %% Parameter recovery (fit model to simulated data)
 
@@ -232,29 +239,38 @@ for ip = 1:numel(param_sets)
     kinf = param_sets{ip}(4);
     
     for isim = 1:ns
+        fprintf('Generative parameters: epsi: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f\n', ...
+                epsi,zeta,kini,kinf);
         cfg = [];
         cfg.resp = sim_struct(ip).resp(:,:,isim);
         cfg.rt = sim_struct(ip).rew_seen(:,:,isim);
+        cfg.ms = sim_struct(ip).ms;
         cfg.vs = sim_struct(ip).vs;
         cfg.nsmp = 1e3;
         cfg.lstruct = 'sym'; % assume symmetric action values
         cfg.verbose = true; % plot fitting information
         cfg.ksi = 0; % assume no constant term in learning noise
+        cfg.sbias_cor = sbias_cor;
+        cfg.sbias_ini = sbias_ini;
 
-        out_fit{ip,isim} = fit_noisyKF_epsibias(cfg); % fit the model to data
+        out_fit{ip,isim} = fit_noisyKF_epsibias_old(cfg); % fit the model to data
+        %out_fit{ip,isim} = fit_noisyKF_epsibias(cfg); % fit the model to data
         
         epsi_fit{ip,isim} = out_fit{ip,isim}.epsi;
         zeta_fit{ip,isim} = out_fit{ip,isim}.zeta;
         kini_fit{ip,isim} = out_fit{ip,isim}.kini;
         kinf_fit{ip,isim} = out_fit{ip,isim}.kinf;
+        
+        fprintf('Recovered parameters: epsi: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
+                epsi_fit{ip,isim},zeta_fit{ip,isim},kini_fit{ip,isim},kinf_fit{ip,isim},out_fit{ip,isim}.theta);   
     end
 end
 savename = ['fit_struct_epsibias_' datestr(now,'ddmmyyyy')];
 save(savename,'out_fit','param_sets','sim_struct','epsi_fit','zeta_fit','kini_fit','kinf_fit');
 
 %% Organize fit parameters
-loadname = 'fit_struct_epsibias_complete_10082020.mat'; % Fits from 10 August 2020
-load(loadname);
+%loadname = 'fit_struct_epsibias_complete_10082020.mat'; % Fits from 10 August 2020
+%load(loadname);
 
 for ip = 1:numel(param_sets)
     % generative parameters

@@ -316,8 +316,6 @@ out.vt = permute(reshape(vt_hat,[nt,nb,2]),[2,1,3]);
         end
     end
 
-    %%%% need to change to remove epsi from ll calculation %%%%
-
     function [ll,ll_sd] = getll(varargin)
         % compute response probability
         p = getp(varargin{:});
@@ -340,8 +338,8 @@ out.vt = permute(reshape(vt_hat,[nt,nb,2]),[2,1,3]);
     function [pt,mt,vt] = getp(kini,kinf,zeta,ksi,theta,delta)
         % reparametrize delta
         delta = (delta_lim(2)-delta_lim(1))*delta+delta_lim(1);
-        fprintf('delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
-                delta,zeta,kini,kinf,theta);
+%        fprintf('delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
+%                delta,zeta,kini,kinf,theta);
         % express softmax temperature as selection noise
         ssel = pi/sqrt(6)*theta;
         % run particle filter
@@ -356,6 +354,7 @@ out.vt = permute(reshape(vt_hat,[nt,nb,2]),[2,1,3]);
                     % toward correct action
                     rbias = 1;
                 else
+                    % toward chosen subject/simulation action
                     rbias = resp(itrl);
                 end
                 % initialize posterior means and variances
@@ -439,10 +438,13 @@ out.vt = permute(reshape(vt_hat,[nt,nb,2]),[2,1,3]);
             end
         end
         
-        resp_conv = resp;
-        resp_conv(resp_conv ~= 1) = 0;
-        plot(resp_conv-mean(pt,2));
-        pause(eps);
+        % visualize data-fit difference
+        if false
+            resp_conv = resp;
+            resp_conv(resp_conv ~= 1) = 0;
+            plot(resp_conv-mean(pt,2));
+            pause(eps);
+        end
     end
 end
 
