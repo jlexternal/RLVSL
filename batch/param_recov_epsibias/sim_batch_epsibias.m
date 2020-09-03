@@ -23,7 +23,7 @@ sbias_cor = false;   % 1st-choice bias toward the correct structure
 sbias_ini = false;   % KF means biased toward the correct structure
 cscheme = 'qvs';    % 'arg'-argmax; 'qvs'-softmax;      'ths'-Thompson sampling
 lscheme = 'sym';    % 'ind'-independent action values;  'sym'-symmetric action values
-nscheme = 'rpe';    % 'rpe'-noise scaling w/ RPE;       'upd'-noise scaling w/ value update
+nscheme = 'upd';    % 'rpe'-noise scaling w/ RPE;       'upd'-noise scaling w/ value update
 % Model parameters
 ns      = 27;       % Number of simulated agents to generate per given parameter
 ksi     = 0.0+eps;  % Learning noise constant
@@ -99,7 +99,7 @@ for ip = 1:numel(param_sets)
     if sameexpe
         rew = cat(3,rew,repmat(rew(:,:,1),[1 1 ns-1]));
     else
-        for issim = 1:ns-1
+        for isim = 1:ns-1
             rew = cat(3,rew,round(gen_blck_rlvsl(cfg_gb),2));
         end
     end
@@ -179,11 +179,21 @@ for ip = 1:numel(param_sets)
                 % 1/chosen option
                 mt(ib,it,c,ind_c) = mt(ib,it-1,c,ind_c) + reshape(kt(c,ind_c),size(rew_seen)).*(rew_seen-mt(ib,it-1,c,ind_c));
                 vt(ib,it,c,ind_c) = (1-reshape(kt(c,ind_c),size(rew_seen))).*vt(ib,it-1,c,ind_c);
-                st(ib,it,c,ind_c) = sqrt(zeta^2*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); % RPE-scaled learning noise
+                switch nscheme
+                    case 'rpe' % RPE-scaled learning noise
+                        st(ib,it,c,ind_c) = sqrt(zeta^2*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); 
+                    case 'upd' % update-value-scaled learning noise
+                        st(ib,it,c,ind_c) = sqrt(zeta^2*reshape(kt(c,ind_c),size(rew_seen)).*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); 
+                end
                 % 2/unchosen option
                 mt(ib,it,u,ind_c) = mt(ib,it-1,u,ind_c) + reshape(kt(u,ind_c),size(rew_unseen)).*(rew_unseen-mt(ib,it-1,u,ind_c));
                 vt(ib,it,u,ind_c) = (1-reshape(kt(u,ind_c),size(rew_unseen))).*vt(ib,it-1,u,ind_c);
-                st(ib,it,u,ind_c) = sqrt(zeta^2*((rew_unseen-mt(ib,it-1,u,ind_c)).^2+ksi^2));
+                switch nscheme
+                    case 'rpe' % RPE-scaled learning noise
+                        st(ib,it,u,ind_c) = sqrt(zeta^2*((rew_unseen-mt(ib,it-1,u,ind_c)).^2+ksi^2));
+                    case 'upd' % update-value-scaled learning noise
+                        st(ib,it,u,ind_c) = sqrt(zeta^2*reshape(kt(u,ind_c),size(rew_unseen)).*((rew_unseen-mt(ib,it-1,u,ind_c)).^2+ksi^2));
+                end
             end
             % variance extrapolation/diffusion process 
             vt(ib,it,:,:)  = vt(ib,it,:,:)+fv(kinf); % covariance noise update
@@ -261,5 +271,4 @@ save(savename,'sim_data');
 
 %% test batch function
 
-nbatch = 5;
-fn_rec_batch_epsibias(1);
+fn_rec_batch_epsibias(48);

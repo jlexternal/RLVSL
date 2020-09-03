@@ -14,8 +14,8 @@ function fn_rec_batch_epsibias(ibatch)
 
     % NOTE: the name of the string must match the data file in 
     %       working directory
-    load('data_sim_epsibias_01092020.mat'); % load sim data
-    nbatch = 100; % number of total batches to be sent to SLURM
+    load('data_sim_epsibias_03092020.mat'); % load sim data
+    nbatch = 48; % number of total batches to be sent to SLURM; calculate this properly to distribute the output evenly
     
 % **************************************************************** %
 
@@ -29,12 +29,13 @@ if ibatch > nbatch
     error('Batch number is greater than total number of designated batches!')
 end
 addpath('./vbmc');
+addpath('./Toolboxes');
 
 
 % holds the index range of the parameters for each batch
 idx_batch   = nan(nbatch,2);
 % number of parameter sets per batch
-n_per_batch = floor(numel(param_sets)/nbatch); 
+n_per_batch = floor(numel(param_sets)/nbatch);
 % calculate parameter set index limits for each batch
 for i = 1:nbatch
     idx_batch(i,:) = [1+(i-1)*n_per_batch i*n_per_batch];
@@ -46,7 +47,7 @@ for i = 1:nbatch
 end
 
 % Run parameter recovery for the chosen batch
-for ip = idx_batch(ibatch,:)
+for ip = idx_batch(ibatch,1):idx_batch(ibatch,end)
     epsi = param_sets{ip}(1);
     zeta = param_sets{ip}(2);
     kini = param_sets{ip}(3);
