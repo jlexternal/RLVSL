@@ -19,8 +19,8 @@ fk = @(v)1./(1+exp(+0.4486-log2(v/vs)*0.6282)).^0.5057;
 fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
 
 % Assumptions of the model
-sbias_cor = true;   % 1st-choice bias toward the correct structure
-sbias_ini = true;   % KF means biased toward the correct structure
+sbias_cor = false;   % 1st-choice bias toward the correct structure
+sbias_ini = false;   % KF means biased toward the correct structure
 cscheme = 'qvs';    % 'arg'-argmax; 'qvs'-softmax;      'ths'-Thompson sampling
 lscheme = 'sym';    % 'ind'-independent action values;  'sym'-symmetric action values
 nscheme = 'upd';    % 'rpe'-noise scaling w/ RPE;       'upd'-noise scaling w/ value update
@@ -30,7 +30,6 @@ ksi     = 0.0+eps;  % Learning noise constant
 
 % Simulation settings
 sameexpe = false;   % true if all sims see the same reward scheme
-nexp     = 10;      % number of different reward schemes to try per given parameter set
 
 sim_struct = struct;
 
@@ -428,32 +427,4 @@ scatter(vals_fit(:,1),vals_fit(:,2),50,'filled');
 ylim([0 1])
 xlabel(sprintf('Generative parameter: %s',param_str{i_gen}));
 ylabel(sprintf('Recovered parameter: %s',param_str{i_rec}));
-
-%% Local functions
-function [xt] = resample(m,s,ssel,r)
-% 1/ resample (x1-x2)
-md = m(1,:)-m(2,:);
-sd = sqrt(sum(s.^2,1));
-td = tnormrnd(md,sqrt(sd.^2+ssel.^2),r); 
-xd = normrnd( ...
-    (ssel.^2.*md+sd.^2.*td)./(ssel.^2+sd.^2), ...
-    sqrt(ssel.^2.*sd.^2./(ssel.^2+sd.^2)));
-% 2/ resample x1 from (x1-x2)
-ax = s(1,:).^2./sd.^2;
-mx = m(1,:)-ax.*md;
-sx = sqrt(s(1,:).^2-ax.^2.*sd.^2);
-x1 = ax.*xd+normrnd(mx,sx);
-% 3/ return x1 and x2 = x1-(x1-x2)
-xt = cat(1,x1,x1-xd);
-end
-
-function [x] = tnormrnd(m,s,d)
-% sample from truncated normal distribution
-for id = 1:numel(d)
-    if d(id) == 1
-        x(id) = +rpnormv(+m(id),s(id));
-    else
-        x(id) = -rpnormv(-m(id),s(id));
-    end
-end
 end

@@ -19,34 +19,12 @@ fk = @(v)1./(1+exp(+0.4486-log2(v/vs)*0.6282)).^0.5057;
 fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
 
 % Assumptions of the model
-sbias_cor = false;  % 1st-choice bias toward the correct structure
-sbias_ini = false;  % KF means biased toward the correct structure
-
+lscheme = 'sym';    % 'ind'-independent action values;  'sym'-symmetric action values
+nscheme = 'upd';    % 'rpe'-noise scaling w/ RPE;       'upd'-noise scaling w/ value update
 
 % Model parameters
 ns      = 27;       % Number of simulated agents to generate per given parameter
-% KF learning parameters
-kini    = 0.8-eps;  % Initial Kalman gain
-kinf    = 0.3+eps;  % Asymptotic Kalman gain
-% Learning noise parameters
-zeta    = 0.3+eps;  % Learning noise scale
 ksi     = 0.0+eps;  % Learning noise constant
-
-%%%% Need to play with this a bit and figure out how to parametrize it
-% Thompson-sampling bias parameter
-delta   = 0.2;      % 
-
-%%%%
-
-% Selection parameters
-theta   = 1;       % Inverse softmax temperature 
-
-params_gen = struct;
-params_gen.delta = delta;
-params_gen.kini = kini;
-params_gen.kinf = kinf;
-params_gen.zeta = zeta;
-params_gen.ksi  = ksi;
 
 % Simulation settings
 sameexpe = false;   % true if all sims see the same reward scheme
@@ -54,22 +32,12 @@ sameexpe = false;   % true if all sims see the same reward scheme
 sim_struct = struct;
 
 %% Run simulation
-if sbias_cor
-    disp('Assuming 1st-choice bias toward the correct structure!');
-else
-    disp('Assuming NO 1st-choice bias toward correct structure!');
-end
-if sbias_ini
-    disp('Assuming initial bias of the mean toward the correct structure!');
-else
-    disp('Assuming NO initial means bias!');
-end
 
 % Organize parameter values into sets for simulation
-deltas = .05; %linspace(0,0.2,4);
-zetas = .3; %[0:.1:.4]+1e-6;
-kinis = [0.90];%.5:.1:1;
-kinfs = [0.10];%0:.1:.4;
+deltas = 0; %linspace(0,0.23,9);
+zetas = 0.0; %[0:.1:.4]+1e-6;
+kinis = [0.90]-eps;%.5:.1:1;
+kinfs = [0.10]+eps;%0:.1:.4;
 thetas = 0; %[0 .2 .4 .6 1 ]+eps;
 param_sets = {};
 
@@ -124,47 +92,19 @@ for ip = 1:numel(param_sets)
     for ib = 1:nb
         for it = 1:nt
             if it == 1
-                % determine structure bias
-                if sbias_cor
-                    % correct 1st choice
-                    rb(:) = 1;
-                else
-                    % random sampling of 1st choice based on structure bias strength
-  %                  rb = randsample(2,ns,true,[.5+delta .5-delta]);
-                    
-                    % sampling based on argmax of drawn values
-                    rb = double(normrnd(.5+delta,r_sd,ns,1) >= .5);
-                    rb(rb~=1) = 2;
-                end
-                ind_rb = rb == 1;
                 % initialize KF means and variances
-                if sbias_ini
-                    % initial tracking mean biased based on the delta parameter
-                    mt(ib,it,1,ind_rb)  = .5+delta;
-                    mt(ib,it,1,~ind_rb) = .5-delta;
-                    mt(ib,it,2,:) = 1-mt(ib,it,1,:);
-                else
-                    % initial tracking mean unbiased
-                    mt(ib,it,:,:) = .5;
-                end
+                mt(ib,it,:,:)  = .5;
                 % initialize posterior variance based on initial kalman gain parameter
                 vt(ib,it,:,:) = kini/(1-kini)*vs;
                 % first trial response probability
-                if sbias_cor
-                    md = (mt(ib,it,1,:)+delta)-mt(ib,it,2,:); % biasing the means via delta
-                    sd = sqrt(sum(vt(ib,it,:,:),3));
-                    pd = 1-normcdf(0,md,sd);
-                    pt(ib,it,:) = pd;
-                else
-                    pt(ib,it,:) = rb == 1;
-                end
+                pd = normrnd(delta,r_sd,ns,1);
+                pt(ib,it,:) = reshape(pd,size(pt(ib,it,:)));
                 % first trial response % 1/correct, 2/incorrect
-                rt(ib,it,:) = round(pt(ib,it,:)); % argmax choice
-                rt(rt==0) = 2;
+                rt(ib,it,:) = double(pt(ib,it,:)>=0); % argmax choice
+                rt(rt~=1) = 2;
                 continue;
             end
-%            rb(:) = 1; % debug (ignore)
-
+            
             % update Kalman gain
             kt = reshape(vt(ib,it-1,:,:)./(vt(ib,it-1,:,:)+vs),[2 ns]);
             % update posterior mean & variance
@@ -192,15 +132,25 @@ for ip = 1:numel(param_sets)
                 % 1/chosen option
                 mt(ib,it,c,ind_c) = mt(ib,it-1,c,ind_c) + reshape(kt(c,ind_c),size(rew_seen)).*(rew_seen-mt(ib,it-1,c,ind_c));
                 vt(ib,it,c,ind_c) = (1-reshape(kt(c,ind_c),size(rew_seen))).*vt(ib,it-1,c,ind_c);
-                st(ib,it,c,ind_c) = sqrt(zeta^2*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); % RPE-scaled learning noise
+                switch nscheme
+                    case 'rpe' % RPE-scaled learning noise
+                        st(ib,it,c,ind_c) = sqrt(zeta^2*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); 
+                    case 'upd' % update-value-scaled learning noise
+                        st(ib,it,c,ind_c) = sqrt(zeta^2*reshape(kt(c,ind_c),size(rew_seen)).*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); 
+                end
                 % 2/unchosen option
                 mt(ib,it,u,ind_c) = mt(ib,it-1,u,ind_c) + reshape(kt(u,ind_c),size(rew_unseen)).*(rew_unseen-mt(ib,it-1,u,ind_c));
                 vt(ib,it,u,ind_c) = (1-reshape(kt(u,ind_c),size(rew_unseen))).*vt(ib,it-1,u,ind_c);
-                st(ib,it,u,ind_c) = sqrt(zeta^2*((rew_unseen-mt(ib,it-1,u,ind_c)).^2+ksi^2));
+                switch nscheme
+                    case 'rpe' % RPE-scaled learning noise
+                        st(ib,it,u,ind_c) = sqrt(zeta^2*((rew_unseen-mt(ib,it-1,u,ind_c)).^2+ksi^2));
+                    case 'upd' % update-value-scaled learning noise
+                        st(ib,it,u,ind_c) = sqrt(zeta^2*reshape(kt(u,ind_c),size(rew_unseen)).*((rew_unseen-mt(ib,it-1,u,ind_c)).^2+ksi^2));
+                end
             end
             % variance extrapolation/diffusion process 
             vt(ib,it,:,:)  = vt(ib,it,:,:)+fv(kinf); % covariance noise update
-            
+
             % decision variable stats
             md = reshape(((mt(ib,it,1,:)+delta)-mt(ib,it,2,:))./sqrt(sum(vt(ib,it,:,:))),[1 ns]);
             sd = reshape(sqrt(sum(st(ib,it,:,:).^2,3)./sum(vt(ib,it,:,:),3)+ssel^2),[1 ns]);
@@ -209,16 +159,6 @@ for ip = 1:numel(param_sets)
             % extract choice from probabilities
             rt(ib,it,:) = round(pt(ib,it,:));
             rt(rt==0) = 2;
-            % resampling
-            if zeta > 0 || ksi > 0
-                delta_vec1 = reshape(double(ind_rb),size(mt(ib,it,1,:)));
-                delta_vec2 = reshape(double(~ind_rb),size(mt(ib,it,1,:)));
-                %mt(ib,it,:,:) = resample(reshape([mt(ib,it,1,:)+delta mt(ib,it,2,:)],[2,ns]),...
-                mt(ib,it,:,:) = resample(reshape([mt(ib,it,1,:)+delta*delta_vec1 mt(ib,it,2,:)+delta*delta_vec2],[2,ns]),...
-                                         reshape(st(ib,it,:,:),[2,ns]),...
-                                         reshape(ssel*sqrt(sum(vt(ib,it,:,:),3)),[1 ns]),... % width increase due to KF variance
-                                         reshape(rt(ib,it,:),[1 ns]));
-            end
         end
     end
     
@@ -229,9 +169,13 @@ for ip = 1:numel(param_sets)
     sim_struct(out_ctr).kinf = kinf;
     sim_struct(out_ctr).theta = theta;
     sim_struct(out_ctr).ksi  = ksi;
+    sim_struct(out_ctr).ns   = ns;
+    sim_struct(out_ctr).ms   = r_mu;
     sim_struct(out_ctr).vs   = vs;
     sim_struct(out_ctr).resp = rt;
     sim_struct(out_ctr).rew_seen = rew_c;
+    sim_struct(out_ctr).lscheme  = lscheme;
+    sim_struct(out_ctr).nscheme  = nscheme;
     
     % plot simulation data
     if true
@@ -284,22 +228,23 @@ for ip = idx_batch(ibatch,:)
     theta = param_sets{ip}(5);
     
     for isim = 1:ns
-        
         fprintf('Generative parameters: delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
-                delta,zeta,kini,kinf,theta);
+                delta,zeta,kini,kinf,theta); 
+            
         cfg = [];
         cfg.resp = sim_struct(ip).resp(:,:,isim);
         cfg.rt = sim_struct(ip).rew_seen(:,:,isim);
-        cfg.ms = .55;
         cfg.vs = sim_struct(ip).vs;
+        cfg.ms = sim_struct(ip).ms;
         cfg.nsmp = 1e3;
-        cfg.lstruct = 'sym'; % assume symmetric action values
-        cfg.sbias_cor = false;
-        cfg.verbose = true; % plot fitting information
         cfg.ksi = 0; % assume no constant term in learning noise
-        cfg.theta = 0; % fix to argmax choice
+        cfg.lscheme = sim_struct(ip).lscheme;
+        cfg.nscheme = sim_struct(ip).nscheme;
+        cfg.verbose = true;
+        
+        %cfg.delta = 0.5;
 
-        out_fit{ip,isim} = fit_noisyKF_thombias(cfg); % fit the model to data
+        out_fit{ip,isim} = fit_noisyKF_thombias_production(cfg); % fit the model to data
         
         delta_fit{ip,isim} = out_fit{ip,isim}.delta;
         zeta_fit{ip,isim} = out_fit{ip,isim}.zeta;
@@ -307,9 +252,10 @@ for ip = idx_batch(ibatch,:)
         kinf_fit{ip,isim} = out_fit{ip,isim}.kinf;
         
         delta_rp = .4*delta_fit{ip,isim}-.2;% reparametrized from fitted transform delta
-        
+        fprintf('Generative parameters: delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
+                delta,zeta,kini,kinf,theta); 
         fprintf('Recovered parameters: delta: %.04f | zeta: %.02f | kini: %.02f | kinf: %.02f | theta: %.02f\n', ...
-                delta_rp,zeta_fit{ip,isim},kini_fit{ip,isim},kinf_fit{ip,isim},cfg.theta);
+                delta_rp,zeta_fit{ip,isim},kini_fit{ip,isim},kinf_fit{ip,isim},out_fit{ip,isim}.theta);
     end
 end
 
@@ -337,7 +283,7 @@ for ip = 1:numel(param_sets)
         cfg.verbose = true; % plot fitting information
         cfg.ksi = 0; % assume no constant term in learning noise
 
-        out_fit{ip,isim} = fit_noisyKF_epsibias(cfg); % fit the model to data
+        out_fit{ip,isim} = fit_noisyKF_thombias_production(cfg); % fit the model to data
         
         delta_fit{ip,isim} = out_fit{ip,isim}.delta;
         zeta_fit{ip,isim} = out_fit{ip,isim}.zeta;
