@@ -28,6 +28,8 @@ idx_rep = nan(nb_c,3,nsubj); % index of blocks with complete repetition (general
 idx_inc = nan(nb_c,3,nsubj); % index of blocks with complete repetition (incorrect)
 
 rts_blk = nan(nb_c,3,nsubj); % mean block RTs
+rts_blk_neg = nan(nb_c,3,nsubj); % mean block RTs on negative feedback
+cts_blk_neg = nan(nb_c,3,nsubj); % negative feedback trials count
 
 for isubj = subjlist
     jsubj = find(subjlist==isubj);
@@ -60,7 +62,13 @@ for isubj = subjlist
         rt = expe(ib).rt;
         rts_blk(ib_c(ic),ic,jsubj) = mean(rt);
         
+        % seen rewards
+        rews = convert_fb_raw2seen(expe(ib).blck,resp,expe(1).cfg.mgen,expe(1).cfg.sgen);
         
+        % for each quarter, check negative feedback
+        ind_rewneg = rews<50;
+        rts_blk_neg(ib_c(ic),ic,jsubj) = mean(rt(ind_rewneg));
+        cts_blk_neg(ib_c(ic),ic,jsubj) = sum(ind_rewneg);
         
         ib_c(ic) = ib_c(ic)+1;
     end
@@ -109,34 +117,28 @@ for isubj = 1:nsubj
     for iq = 1:4
         for ic = 1:3
             blockrange = 4*(iq-1)+1:4*(iq-1)+4;
+            % Calculate mean RTs on split
             % on blocks of absolute repetition
             rts_qt_split(iq,ic,isubj,1) = mean(rts_blk(ismember(1:16,blockrange) & idx_rep(:,ic,isubj)',ic,isubj));
             % not on blocks of absolute repetition
             rts_qt_split(iq,ic,isubj,2) = mean(rts_blk(ismember(1:16,blockrange) & ~idx_rep(:,ic,isubj)',ic,isubj));
             
-            % calculate "task/motor learning" RT effect
-            if ic ==3
-                if iq ==1
-                    rts_motlearn_diff(isubj,1) = mean(rts_blk(ismember(1:16,blockrange),ic,isubj));
-                elseif iq == 4
-                    rts_motlearn_diff(isubj,2) = mean(rts_blk(ismember(1:16,blockrange),ic,isubj));
-                end
-            end
+            % Calculate mean RTs on negative feedback on split
+            
+            
+            
         end
     end
 end
 
 rts_qt_split_m = squeeze(mean(rts_qt_split(:,:,:,:),3,'omitnan')); % 4 qts x 3 conds x 2 splits
 
-rts_motlearn = bsxfun(@minus,rts_motlearn_diff(:,1),rts_motlearn_diff(:,2));
-
 % calculate SEM separately for each quarter x condition (unequal number of
 % subjects split on any given q x c)
 figure;
 ictr = 1;
 er_rts = nan(4,3,2);
-includeall = false;
-rmmotlearn = true;
+includeall = false; % false: remove subjects w/o split
 for ic = 1:3
     for iq = 1:4
         for i = 1:2
@@ -169,7 +171,7 @@ for ic = 1:3
         % calculate statistics within quarter on conditions (removing
         % subjects who do not have both)
         if includeall
-            [h,p] = ttest2(split1,split2,'Vartype','unequal') % Welch's t-test
+            [h,p] = ttest2(split1,split2,'Vartype','unequal','Tail','left'); % Welch's t-test
         else
             [h,p] = ttest(split1,split2,'Tail','left'); % paired t-test
         end
@@ -182,10 +184,7 @@ for ic = 1:3
     end
 end
 
-
-%%
-
-
+% Plot mean reaction times over quarters x conditions split on blocks of absolute repetition
 figure;
 for ic = 1:3
     condrgb = zeros(1,3);
@@ -210,6 +209,9 @@ end
 
 
 %% Check RTs on reactions to disconfirmatory evidence on split 
+
+
+
 
 
 

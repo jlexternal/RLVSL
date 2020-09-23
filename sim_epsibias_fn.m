@@ -164,9 +164,9 @@ for ib = 1:nb
             % Calculate learning noise contribution to spread
             switch nscheme
                 case 'rpe' % RPE-scaled learning noise
-                    st(ib,it,c,ind_c) = sqrt(zeta^2*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); 
+                    st(ib,it,c,ind_c) = sqrt(zeta^2*(rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2); 
                 case 'upd' % update-value-scaled learning noise
-                    st(ib,it,c,ind_c) = sqrt(zeta^2*reshape(kt(c,ind_c),size(rew_seen)).*((rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); 
+                    st(ib,it,c,ind_c) = sqrt(zeta^2*(reshape(kt(c,ind_c),size(rew_seen)).*(rew_seen-mt(ib,it-1,c,ind_c)).^2+ksi^2)); 
             end
             % Update mean after learning noise contribution
             mt(ib,it,c,ind_c) = normrnd(mt(ib,it,c,ind_c), ...  

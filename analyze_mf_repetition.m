@@ -28,6 +28,8 @@ idx_rep = nan(nb_c,3,nsubj); % index of blocks with complete repetition (general
 idx_inc = nan(nb_c,3,nsubj); % index of blocks with complete repetition (incorrect)
 
 rts_blk = nan(nb_c,3,nsubj); % mean block RTs
+rts_blk_neg = nan(nb_c,3,nsubj); % mean block RTs on negative feedback
+cts_blk_neg = nan(nb_c,3,nsubj); % negative feedback trials count
 
 for isubj = subjlist
     jsubj = find(subjlist==isubj);
@@ -60,7 +62,13 @@ for isubj = subjlist
         rt = expe(ib).rt;
         rts_blk(ib_c(ic),ic,jsubj) = mean(rt);
         
+        % seen rewards
+        rews = convert_fb_raw2seen(expe(ib).blck,resp,expe(1).cfg.mgen,expe(1).cfg.sgen);
         
+        % for each quarter, check negative feedback
+        ind_rewneg = rews<50;
+        rts_blk_neg(ib_c(ic),ic,jsubj) = mean(rt(ind_rewneg));
+        cts_blk_neg(ib_c(ic),ic,jsubj) = sum(ind_rewneg);
         
         ib_c(ic) = ib_c(ic)+1;
     end
@@ -105,32 +113,43 @@ hold off
 %% Calculate mean RTs on blocks split by absolute repetition 
 
 rts_qt_split = nan(4,3,nsubj,2); % (qt,cond,subj,split)
+rts_qt_split_neg = nan(4,3,nsubj,2); % (qt,cond,subj,split)
+
 for isubj = 1:nsubj
     for iq = 1:4
         for ic = 1:3
             blockrange = 4*(iq-1)+1:4*(iq-1)+4;
+            % Calculate mean RTs on split
             % on blocks of absolute repetition
             rts_qt_split(iq,ic,isubj,1) = mean(rts_blk(ismember(1:16,blockrange) & idx_rep(:,ic,isubj)',ic,isubj));
             % not on blocks of absolute repetition
             rts_qt_split(iq,ic,isubj,2) = mean(rts_blk(ismember(1:16,blockrange) & ~idx_rep(:,ic,isubj)',ic,isubj));
+            
+            % Calculate mean RTs on negative feedback on split
+            rts_qt_split_neg(iq,ic,isubj,1) = mean(rts_blk_neg(ismember(1:16,blockrange) & idx_rep(:,ic,isubj)',ic,isubj));
+            rts_qt_split_neg(iq,ic,isubj,2) = mean(rts_blk_neg(ismember(1:16,blockrange) & ~idx_rep(:,ic,isubj)',ic,isubj));
+            
+            
         end
     end
 end
 
 rts_qt_split_m = squeeze(mean(rts_qt_split(:,:,:,:),3,'omitnan')); % 4 qts x 3 conds x 2 splits
+rts_qt_split_neg_m = squeeze(mean(rts_qt_split_neg(:,:,:,:),3,'omitnan'));
 
-% calculate SEM separately for each quarter x condition (unequal number of
-% subjects split on any given q x c)
+% Plot mean RTs on blocks split by absolute repetition
 figure;
 ictr = 1;
 er_rts = nan(4,3,2);
+er_rts_neg = nan(4,3,2);
 includeall = false; % false: remove subjects w/o split
 for ic = 1:3
     for iq = 1:4
         for i = 1:2
             idx_nan = isnan(rts_qt_split(iq,ic,:,i));
-            nsubj_sem = nsubj-sum(idx_nan);
+            nsubj_sem = nsubj-sum(idx_nan); % calculate SEM separately for each quarter x condition 
             er_rts(iq,ic,i) = std(rts_qt_split(iq,ic,:,i),1,3,'omitnan')/sqrt(nsubj_sem);
+            er_rts_neg(iq,ic,i) = std(rts_qt_split_neg(iq,ic,:,i),1,3,'omitnan')/sqrt(nsubj_sem);
         end
         % new variable to pass into Welch's test
         split1 = squeeze(rts_qt_split(iq,ic,:,1));
@@ -177,27 +196,86 @@ for ic = 1:3
     condrgb(ic) = 1;
     subplot(3,1,ic);
     hold on;
-    scatter([1:4]+.1*(ic-2),rts_qt_split_m(:,ic,1),'MarkerEdgeColor',condrgb,'HandleVisibility','off') % rep split
-    plot([1:4]+.1*(ic-2),rts_qt_split_m(:,ic,1),'LineWidth',2,'Color',condrgb);
-    errorbar([1:4]+.1*(ic-2),rts_qt_split_m(:,ic,1),er_rts(:,ic,1),'LineStyle','none','Color',condrgb,'HandleVisibility','off');
+    scatter([1:4],rts_qt_split_m(:,ic,1),'MarkerEdgeColor',condrgb,'HandleVisibility','off') % rep split
+    plot([1:4],rts_qt_split_m(:,ic,1),'LineWidth',2,'Color',condrgb);
+    errorbar([1:4],rts_qt_split_m(:,ic,1),er_rts(:,ic,1),'LineStyle','none','Color',condrgb,'HandleVisibility','off');
     
-    scatter([1:4]+.1*(ic-2),rts_qt_split_m(:,ic,2),'x','MarkerEdgeColor',condrgb,'HandleVisibility','off') % not-rep split
-    plot([1:4]+.1*(ic-2),rts_qt_split_m(:,ic,2),':','LineWidth',2,'Color',condrgb);
-    errorbar([1:4]+.1*(ic-2),rts_qt_split_m(:,ic,2),er_rts(:,ic,2),'LineStyle','none','Color',condrgb,'HandleVisibility','off')
+    scatter([1:4],rts_qt_split_m(:,ic,2),'x','MarkerEdgeColor',condrgb,'HandleVisibility','off') % not-rep split
+    plot([1:4],rts_qt_split_m(:,ic,2),':','LineWidth',2,'Color',condrgb);
+    errorbar([1:4],rts_qt_split_m(:,ic,2),er_rts(:,ic,2),'LineStyle','none','Color',condrgb,'HandleVisibility','off')
     legend({'Complete rep ','not'});
     xticks([1:4]);
     xlim([.5 4.5]);
-    ylim([.5 .9])
+    ylim([.4 1])
     xlabel('Quarter');
     ylabel('Reaction time (s)');
     hold off;
 end
+sgtitle('Reaction times (split on absolute repetition blocks)');
 
 
-%% Check RTs on reactions to disconfirmatory evidence on split 
+%% Check RTs on reactions to negative feedback on split 
+figure;
+for ic = 1:3
+    condrgb = zeros(1,3);
+    condrgb(ic) = 1;
+    subplot(3,1,ic);
+    hold on;
+    scatter([1:4],rts_qt_split_neg_m(:,ic,1),'MarkerEdgeColor',condrgb,'HandleVisibility','off') % rep split
+    plot([1:4],rts_qt_split_neg_m(:,ic,1),'LineWidth',2,'Color',condrgb);
+    errorbar([1:4],rts_qt_split_neg_m(:,ic,1),er_rts(:,ic,1),'LineStyle','none','Color',condrgb,'HandleVisibility','off');
+    
+    scatter([1:4],rts_qt_split_neg_m(:,ic,2),'x','MarkerEdgeColor',condrgb,'HandleVisibility','off') % not-rep split
+    plot([1:4],rts_qt_split_neg_m(:,ic,2),':','LineWidth',2,'Color',condrgb);
+    errorbar([1:4],rts_qt_split_neg_m(:,ic,2),er_rts(:,ic,2),'LineStyle','none','Color',condrgb,'HandleVisibility','off')
+    legend({'Complete rep ','not'});
+    xticks([1:4]);
+    xlim([.5 4.5]);
+    ylim([.4 1]);
+    xlabel('Quarter');
+    ylabel('Reaction time (s)');
+    hold off;
+end
+sgtitle('Reaction times on negative feedback (split on absolute repetition blocks)');
 
-
-
+%% Combination of the two plots above
+figure;
+for ic = 1:3
+    condrgb = zeros(1,3);
+    condrgb_neg = zeros(1,4);
+    condrgb_neg(4) = .3;
+    condrgb(ic) = 1;
+    condrgb_neg(ic) = .8;
+    subplot(3,1,ic);
+    hold on;
+    % standard RT means
+    scatter([1:4],rts_qt_split_m(:,ic,1),'MarkerEdgeColor',condrgb,'HandleVisibility','off') % rep split
+    plot([1:4],rts_qt_split_m(:,ic,1),'LineWidth',2,'Color',condrgb);
+    errorbar([1:4],rts_qt_split_m(:,ic,1),er_rts(:,ic,1),'LineStyle','none','Color',condrgb,'HandleVisibility','off');
+    
+    scatter([1:4],rts_qt_split_m(:,ic,2),'x','MarkerEdgeColor',condrgb,'HandleVisibility','off') % not-rep split
+    plot([1:4],rts_qt_split_m(:,ic,2),':','LineWidth',2,'Color',condrgb);
+    errorbar([1:4],rts_qt_split_m(:,ic,2),er_rts(:,ic,2),'LineStyle','none','Color',condrgb,'HandleVisibility','off')
+    
+    % negative fb RT means
+    scatter([1:4]+.1,rts_qt_split_neg_m(:,ic,1),'MarkerEdgeColor',condrgb_neg(1:3),'MarkerEdgeAlpha',condrgb_neg(4),'HandleVisibility','off') % rep split
+    plot([1:4]+.1,rts_qt_split_neg_m(:,ic,1),'LineWidth',2,'Color',condrgb_neg);
+    errorbar([1:4]+.1,rts_qt_split_neg_m(:,ic,1),er_rts(:,ic,1),'LineStyle','none','Color',condrgb_neg,'HandleVisibility','off');
+    
+    scatter([1:4]+.1,rts_qt_split_neg_m(:,ic,2),'x','MarkerEdgeColor',condrgb_neg(1:3),'MarkerEdgeAlpha',condrgb_neg(4),'HandleVisibility','off') % not-rep split
+    plot([1:4]+.1,rts_qt_split_neg_m(:,ic,2),':','LineWidth',2,'Color',condrgb_neg);
+    errorbar([1:4]+.1,rts_qt_split_neg_m(:,ic,2),er_rts(:,ic,2),'LineStyle','none','Color',condrgb_neg,'HandleVisibility','off')
+    
+    
+    legend({'Complete rep ','not','Comp. rep. (neg fb)','not (neg fb)'});
+    xticks([1:4]);
+    xlim([.5 4.5]);
+    ylim([.4 1])
+    xlabel('Quarter');
+    ylabel('Reaction time (s)');
+    hold off;
+end
+sgtitle('Reaction times (split on absolute repetition blocks)');
 
 
 

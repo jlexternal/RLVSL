@@ -95,7 +95,7 @@ title('repeat x correct');
 idx = kmeans([test1 test2 test3],2);
 
 % scatter plot
-figure(4)
+figure;
 jitter = normrnd(0,.01,[numel(test1) 3]);
 for i = 1:2
     scatter3(test1(idx==i)+jitter(idx==i,1),test2(idx==i)+jitter(idx==i,2),test3(idx==i)+jitter(idx==i,3),'.');
