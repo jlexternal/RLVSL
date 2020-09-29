@@ -1,4 +1,4 @@
-% analyze_mf_biascluster
+% analyze_mf_biascluster_logistic
 %
 % Objective: Validate the use of the epsilon-bias parameter in a model-free way by
 %               calculating the cumulative accuracy curves and fitting a logistic

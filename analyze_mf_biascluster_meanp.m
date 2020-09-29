@@ -1,8 +1,7 @@
-% analyze_mf_biascluster
+% analyze_mf_biascluster_meanp
 %
-% Objective: Validate the use of the epsilon-bias parameter in a model-free way by
-%               calculating the cumulative accuracy curves and fitting a logistic
-%               function
+% Objective: Analyze various proportions on subject data 
+%            (correct x repeat_prev x repeat_first)
 %
 % Jun Seok Lee <jlexternal@gmail.com>
 
@@ -91,7 +90,7 @@ xlabel('p(correct)');
 ylabel('p(repeat)');
 title('repeat x correct');
 
-% clustering
+%% cluster plot
 idx = kmeans([test1 test2 test3],2);
 
 % scatter plot
@@ -111,14 +110,18 @@ colors = ['r','g','b'];
 mtype = ['o','x','+'];
 condstr = {'Repeating','Alternating','Random'};
 nbins = 10;
+% if visualizing by quarters
+iq = 4;
+blockrange = 4*(iq-1)+1:4*(iq-1)+4;
+
 for ic = 1:3 
     test1 = [];
     test2 = [];
     test3 = [];
     for isubj = 1:nsubj
-        test1 = cat(1,test1,p_1st(:,1,ic,isubj));
-        test2 = cat(1,test2,p_cor(:,1,ic,isubj));
-        test3 = cat(1,test3,p_rep(:,1,ic,isubj));
+        test1 = cat(1,test1,p_1st(blockrange,1,ic,isubj));
+        test2 = cat(1,test2,p_cor(blockrange,1,ic,isubj));
+        test3 = cat(1,test3,p_rep(blockrange,1,ic,isubj));
     end
     subplot(3,3,3*(ic-1)+1);
     histogram2(test1, test2,[nbins nbins],'Normalization','probability','ShowEmptyBins','on','FaceColor','flat');
@@ -138,3 +141,10 @@ for ic = 1:3
     ylabel('p(repeat)');
     title(sprintf('%s: repeat x correct',condstr{ic}));
 end
+
+if numel(blockrange) == 4
+    sgtitle(sprintf('Comparison of different proportions in quarter %d',iq));
+else
+    sgtitle('Comparison of different proportions over all quarters');
+end
+

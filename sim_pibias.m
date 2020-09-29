@@ -20,9 +20,9 @@ clc;
     bscheme     = 'blk'; % 'trl'-trialwise structure bias    'blk'-blockwise structure bias
     % Model parameters
     ns      = 28;   % Number of simulated agents to generate per given parameter
-    pi      = 0;    % Probability of the block governed by structure learning (repetition)
-    alpha   = .5; 	% Constant learning rate
-    zeta    = .4; 	% Learning noise scaling parameter
+    pi      = 0.5;    % Probability of the block governed by structure learning (repetition)
+    alpha   = .2; 	% Constant learning rate
+    zeta    = .2; 	% Learning noise scaling parameter
     ksi     = 0; 	% Learning noise constant parameter
     theta   = 0; 	% Softmax temperature
     
@@ -40,7 +40,6 @@ cfg_gb = struct; cfg_gb.ntrls = nt; cfg_gb.mgen = ms; cfg_gb.sgen = sqrt(vs); cf
 % generate reward structures
 rew = []; % (nb,nt,ns)
 rew = cat(3,rew,round(gen_blck_rlvsl(cfg_gb),2));
-
 
 if sameexpe
     rew = cat(3,rew,repmat(rew(:,:,1),[1 1 ns-1]));

@@ -1,7 +1,7 @@
 function sim_out = sim_pibias_fn(cfg)
 % sim_pibias
 %
-% Simulates the trial/block-bias RL model for experiment RLVSL
+% Function: Outputs simulation of the trial/block-bias RL model for experiment RLVSL
 % (See below for required configuration values)
 %
 % Jun Seok Lee <jlexternal@gmail.com>
@@ -25,7 +25,12 @@ function sim_out = sim_pibias_fn(cfg)
     ksi     = cfg.ksi;      % Learning noise constant parameter
     theta   = cfg.theta;    % Softmax temperature
     % Simulation settings
-    sameexpe = cfg.sameexpe;    % true if all sims see the same reward scheme
+    if isfield(cfg,'rewcomp')
+        rew = cfg.rewcomp;      % reward scheme as input
+    else
+        rew = [];
+    end
+    sameexpe = cfg.sameexpe;    % true if all sims see the same exact reward scheme
 
 % softmax spread approximation
 ssel = pi/sqrt(6)*theta;
@@ -33,16 +38,15 @@ ssel = pi/sqrt(6)*theta;
 % Generate experiment (reward scheme)
 cfg_gb = struct; cfg_gb.ntrls = nt; cfg_gb.mgen = ms; cfg_gb.sgen = sqrt(vs); cfg_gb.nbout = nb;
 
-% generate reward structures
-rew = []; % (nb,nt,ns)
-rew = cat(3,rew,round(gen_blck_rlvsl(cfg_gb),2));
-
-
-if sameexpe
-    rew = cat(3,rew,repmat(rew(:,:,1),[1 1 ns-1]));
-else
-    for isim = 1:ns-1
-        rew = cat(3,rew,round(gen_blck_rlvsl(cfg_gb),2));
+% generate reward structures if one is not provided
+if ~isfield(cfg,'rewcomp')
+    rew = cat(3,rew,round(gen_blck_rlvsl(cfg_gb),2));
+    if sameexpe
+        rew = cat(3,rew,repmat(rew(:,:,1),[1 1 ns-1]));
+    else
+        for isim = 1:ns-1
+            rew = cat(3,rew,round(gen_blck_rlvsl(cfg_gb),2));
+        end
     end
 end
 

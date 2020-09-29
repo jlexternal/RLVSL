@@ -29,6 +29,8 @@ function sim_out = sim_epsibias_fn(cfg)
     theta   = cfg.theta;
     % Simulation settings
     sameexpe = cfg.sameexpe;    % true if all sims see the same reward scheme
+%   cfg.compexpe is a matrix of the rewards SET in the experiment (not SEEN)
+%   cfg.firstresp is a vector of first responses
     
 % reparameterization functions
 fk = @(v)1./(1+exp(+0.4486-log2(v/vs)*0.6282)).^0.5057;
@@ -41,6 +43,7 @@ else
     if numel(cfg.firstresp) ~= nb
         error('Number of first responses does not match the number of blocks!');
     end
+    firstresp = reshape(firstresp,[nb,1]); % reshape to column vector
 end
 
 sim_out = struct;
