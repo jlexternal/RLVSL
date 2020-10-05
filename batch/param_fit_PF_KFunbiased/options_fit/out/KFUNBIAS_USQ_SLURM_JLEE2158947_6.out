@@ -1,0 +1,47 @@
+MATLAB is selecting SOFTWARE OPENGL rendering.
+
+                            < M A T L A B (R) >
+                  Copyright 1984-2018 The MathWorks, Inc.
+              R2018b Update 2 (9.5.0.1033004) 64-bit (glnxa64)
+                              January 5, 2019
+
+ 
+To get started, type doc.
+For product information, visit www.mathworks.com.
+ 
+Beginning variational optimization assuming NOISY observations of the log-joint.
+ Iteration  f-count    Mean[ELBO]    Std[ELBO]    sKL-iter[q]   K[q]  Convergence  Action
+     1         10        -148.10         7.10   1076008.00        2        Inf     start warm-up
+     2         15        -136.96         0.74        23.40        2        Inf     
+     3         20        -128.39         1.10         6.38        2        146     
+     4         25        -117.76         0.46        14.92        2        313     
+     5         30        -115.47         0.35         2.34        2       51.1     
+     6         35        -114.57         0.70         1.05        2       23.9     
+     7         40        -114.14         0.22         0.15        2       4.53     
+     8         45        -113.29         0.32         4.02        2       80.3     
+     9         50        -112.42         0.27         1.27        2       26.8     
+    10         55        -111.88         0.17         0.35        2       8.31     
+    11         60        -111.47         0.13         0.23        2       5.52     
+    12         65        -110.84         0.38         0.47        2       11.1     
+    13         70        -110.81         0.33         0.05        2       1.49     end warm-up
+    14         75        -109.51         0.37         2.53        2         52     
+    15         80        -108.95         0.12         0.15        2       4.16     
+    16         85        -108.70         0.11         0.06        3       1.84     
+    17         90        -108.68         0.09         0.01        4      0.452     
+    18         95        -108.57         0.09         0.07        7       1.63     
+    19         95        -108.64         0.08         0.09        8       2.01     rotoscale
+    20        100        -108.61         0.08         0.03        8      0.834     
+    21        105        -108.64         0.07         0.02       11      0.482     
+    22        110        -108.62         0.06         0.00       11      0.237     
+    23        115        -108.61         0.05         0.00       13      0.184     
+    24        120        -108.50         0.05         0.00       13      0.403     
+    25        120        -108.43         0.07         0.01       14      0.461     rotoscale
+    26        125        -108.46         0.05         0.00       15      0.225     
+    27        130        -108.44         0.05         0.00       18      0.186     
+    28        135        -108.42         0.05         0.00       21       0.16     stable
+    29        140        -108.40         0.07         0.00       23      0.189     stable
+   Inf        140        -108.32         0.14         0.01       50      0.189     finalize
+
+Inference terminated: variational solution stable for OPTIONS.TolStableCount fcn evaluations.
+Estimated ELBO: -108.321 +/- 0.136.
+

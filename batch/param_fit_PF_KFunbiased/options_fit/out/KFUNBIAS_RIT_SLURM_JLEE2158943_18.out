@@ -1,0 +1,33 @@
+MATLAB is selecting SOFTWARE OPENGL rendering.
+
+                            < M A T L A B (R) >
+                  Copyright 1984-2018 The MathWorks, Inc.
+              R2018b Update 2 (9.5.0.1033004) 64-bit (glnxa64)
+                              January 5, 2019
+
+ 
+To get started, type doc.
+For product information, visit www.mathworks.com.
+ 
+Beginning variational optimization assuming NOISY observations of the log-joint.
+ Iteration  f-count    Mean[ELBO]    Std[ELBO]    sKL-iter[q]   K[q]  Convergence  Action
+     1         10         -71.08         0.85    548301.84        2        Inf     start warm-up
+     2         15         -68.02         0.22         3.28        2        Inf     
+     3         20         -67.50         0.27         0.27        2       7.46     
+     4         25         -67.56         0.04         0.02        2      0.608     
+     5         30         -67.50         0.04         0.04        2       1.14     end warm-up
+     6         35         -67.50         0.04         0.02        2      0.467     
+     7         40         -67.48         0.04         0.01        2      0.328     
+     8         45         -67.53         0.04         0.01        5      0.412     
+     9         50         -67.53         0.04         0.00        5      0.147     
+    10         55         -67.52         0.04         0.00        5      0.217     
+    11         55         -67.51         0.04         0.00        5      0.162     rotoscale
+    12         60         -67.48         0.03         0.00        5      0.215     
+    13         65         -67.50         0.03         0.00        8      0.166     
+    14         70         -67.46         0.03         0.00        8      0.262     stable
+    15         75         -67.44         0.03         0.00       10      0.193     stable
+   Inf         75         -67.45         0.03         0.00       50      0.193     finalize
+
+Inference terminated: variational solution stable for OPTIONS.TolStableCount fcn evaluations.
+Estimated ELBO: -67.454 +/- 0.028.
+
