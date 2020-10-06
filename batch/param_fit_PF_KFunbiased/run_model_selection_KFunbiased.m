@@ -124,12 +124,9 @@ title(sprintf('Model comparison (single subj) \n Log_10 of Bayes Factor'))
 
 %% Random-effects Bayesian Model Selection
 addpath('../../Toolboxes/spm12')
-[alpha,pexp,pexc] = spm_BMS(elbos');
+[alpha,pexp,pexc,pxp] = spm_BMS(elbos');
 
 % > Winning model : choice stochasticity by Thompson sampling, 
 %                   symmetric learning updates (not independent)
 %                   noise scaling on the update value (not rpe)
-
-
-
 
