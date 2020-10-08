@@ -125,65 +125,63 @@ for imod = 1:nmod
     end
 end
 %% Visualize evolution of fitted parameters over time in each condition
+figure(99)
 condstr = {'Repeating','Alternating'};
 parstr  = {'kini','kinf','zeta','epsi','theta'}; 
-for imod = 1:nmod
-    figure
-    for ic = 1
-        subplot(2,1,ic)
-        hold on
-        yline(0,'--','Color',[.8 .8 .8],'HandleVisibility','off');
-        yline(1,'--','Color',[.8 .8 .8],'HandleVisibility','off');
-        for ip=1:size(params,1)
-            for iq = 1:4
-                if iq == 1
-                    handlestr = 'on';
-                else
-                    handlestr = 'off';
-                end
-                x(iq,:) = iq*ones(1,nsubj)+((ip-3)*.1)+normrnd(0,.01,[1,nsubj]);
-                scatter(x(iq,:),...
-                        params(ip,subjlist,ic,iq,imod),...
-                        80,param_rgb(ip),'filled','MarkerFaceAlpha',.1,'HandleVisibility','off')
-
-                errorbar(iq+((ip-3)*.1),mean(params(ip,subjlist,ic,iq,imod)),...
-                            std(params(ip,subjlist,ic,iq,imod),1,2),'o',...
-                            'MarkerEdgeColor',param_rgb(ip),'MarkerFaceColor',param_rgb(ip),...
-                            'Color',param_rgb(ip),'LineWidth',2,'CapSize',0,'HandleVisibility',handlestr)
+for ic = 1:2
+    subplot(2,1,ic)
+    hold on
+    yline(0,'--','Color',[.8 .8 .8],'HandleVisibility','off');
+    yline(1,'--','Color',[.8 .8 .8],'HandleVisibility','off');
+    for ip=1:size(params,1)
+        for iq = 1:4
+            if iq == 1
+                handlestr = 'on';
+            else
+                handlestr = 'off';
             end
-            if ismember(ip,[1 2 3])
-                % connecting lines for each subject
-                plot(x,squeeze(params(ip,subjlist,ic,:,imod))','Color',[param_rgb(ip) .05],'HandleVisibility','off')
-                % connecting lines for the mean parameters
-                plot([1:4]+((ip-3)*.1),squeeze(mean(params(ip,subjlist,ic,:,imod),2))','Color',param_rgb(ip),...
-                    'LineWidth',2,'HandleVisibility','off')
-            end
-            % random/novel condition parameters
-            for ip = 1:size(params_rnd,1)
-                shadedErrorBar([0 5],mean(params_rnd(ip,:),'omitnan')*ones(1,2),std(params_rnd(ip,:),1,2,'omitnan')*ones(1,2),...
-                                'lineprops',{'Color',param_rgb(ip),'HandleVisibility','off'},'patchSaturation',.03)
-            end
+            x(iq,:) = iq*ones(1,nsubj)+((ip-3)*.1)+normrnd(0,.01,[1,nsubj]);
+            scatter(x(iq,:),...
+                    params(ip,~isnan(params(ip,:,ic,iq)),ic,iq),...
+                    80,param_rgb(ip),'filled','MarkerFaceAlpha',.1,'HandleVisibility','off')
+                
+            errorbar(iq+((ip-3)*.1),mean(params(ip,subjlist,ic,iq)),...
+                        std(params(ip,subjlist,ic,iq),1,2),'o',...
+                        'MarkerEdgeColor',param_rgb(ip),'MarkerFaceColor',param_rgb(ip),...
+                        'Color',param_rgb(ip),'LineWidth',2,'CapSize',0,'HandleVisibility',handlestr)
         end
-        if ic == 1
-            legend(parstr)
+        if ismember(ip,[1 2 3])
+            % connecting lines for each subject
+            plot(x,squeeze(params(ip,subjlist,ic,:))','Color',[param_rgb(ip) .05],'HandleVisibility','off')
+            % connecting lines for the mean parameters
+            plot([1:4]+((ip-3)*.1),squeeze(mean(params(ip,subjlist,ic,:),2))','Color',param_rgb(ip),...
+                'LineWidth',2,'HandleVisibility','off')
         end
-        xlim([.5 4.5])
-        ylim([-.2 1.5])
-        xticks(1:4)
-        set(gca,'TickDir','out');
-        xlabel('Quarter')
-        ylabel('Parameter value')
-        title(sprintf('Condition: %s',condstr{ic}),'FontSize',12)
-        sgtitle(sprintf(['Fitted parameters from %sbias model\n Bias towards %s response\n'...
-                        'Choice policy: %s'],bt_comp{imod},bc_str,sn_p_str))
+        % random/novel condition parameters
+        for ip = 1:size(params_rnd,1)
+            shadedErrorBar([0 5],mean(params_rnd(ip,:),'omitnan')*ones(1,2),std(params_rnd(ip,:),1,2,'omitnan')*ones(1,2),...
+                            'lineprops',{'Color',param_rgb(ip),'HandleVisibility','off'},'patchSaturation',.03)
+        end
     end
+    if ic == 1
+        legend(parstr)
+    end
+    xlim([.5 4.5])
+    ylim([-.2 1.5])
+    xticks(1:4)
+    set(gca,'TickDir','out');
+    xlabel('Quarter')
+    ylabel('Parameter value')
+    title(sprintf('Condition: %s',condstr{ic}),'FontSize',12)
+    sgtitle(sprintf(['Fitted parameters from %sbias model\n Bias towards %s response\n'...
+                    'Choice policy: %s'],biastype,bc_str,sn_p_str))
 end
 
 %% Simulate models with fitted parameters for given set of conditions and quarters
 
 % ----------- define conditions and quarters ----------- 
 cond_sim = [1];
-quar_sim = [1:4];
+quar_sim = [3 4];
 % ------------------------------------------------------
 
 sim_out = cell(max(cond_sim),max(quar_sim),nsubjtot,nmod);
@@ -224,10 +222,11 @@ for imod = 1:nmod
     fprintf('Simulating model %d...\n',imod);
     % put fit parameters here and simulate
     for icond = cond_sim
-        fprintf('on condition %d...\n',icond);
+        fprintf('Simulating condition %d...\n',icond);
         for iq = quar_sim
             blockrange = 4*(iq-1)+1:4*(iq-1)+4;
             for isubj = subjlist
+                fprintf('Simulating subject %d...\n',isubj);
                 cfg.kini    = params(1,isubj,ic,iq,imod);
                 cfg.kinf    = params(2,isubj,ic,iq,imod);
                 cfg.zeta    = params(3,isubj,ic,iq,imod);
@@ -246,7 +245,7 @@ end
 %% Calculate model-free measures
 % 1/ Learning curves
 
-lcurve= nan(4,cfg.nt,ncond,nsubj,nmod+1); % quarter, trial, condition, subject, source(subj+nmods)
+lcurve= nan(4,cfg.nt,ncond,nsubj,nmod+1); % quarter, trials, condition, subject, source(subj+nmods)
 
 for isubj = subjlist
     jsubj = find(subjlist==isubj);
@@ -269,28 +268,25 @@ for isubj = subjlist
     end
 end
 
-%% calculate learning curves
-leg_ctr = 1;
-mod_lstyle = {'--',':','-o','-x'};
+%% calculate learning curves across the quarters
 figure
-for ic = cond_sim
+for ic = 1:cond_sim
+    legtxt = cell(8,1);
+    subplot(1,3,ic)
     hold on
     for iq = quar_sim
-        subplot(1,length(quar_sim),find(quar_sim==iq))
         errorbar(1:16,mean(lcurve(iq,:,ic,:,1),4),std(lcurve(iq,:,ic,:,1),1,4)/sqrt(nsubj),...
             'CapSize',0,'Color',graded_rgb(ic,iq),'LineWidth',1.5)
-        legtxt{leg_ctr} = sprintf('Subjects');
-        leg_ctr = leg_ctr + 1;
-        for imod = 1:nmod
-            shadedErrorBar(1:16,mean(lcurve(iq,:,ic,:,imod+1),4),std(lcurve(iq,:,ic,:,2),1,4)/sqrt(nsubj),...
-                'lineprops',{mod_lstyle{imod},'Color',graded_rgb(ic,iq),'LineWidth',1.5},'patchSaturation',.1)
-            legtxt{leg_ctr} = sprintf('Model %d sim',imod);
-            leg_ctr = leg_ctr + 1;
-        end
-        ylim([.4 1]);
-        legend(legtxt,'Location','southeast')
-        title(sprintf('Condition: %d, Quarter: %d',ic,iq))
+        legtxt{2*(iq-1)+1} = sprintf('Subj Q%d',iq);
+        shadedErrorBar(1:16,mean(lcurve(iq,:,ic,:,2),4),std(lcurve(iq,:,ic,:,2),1,4)/sqrt(nsubj),...
+            'lineprops',{'-.','Color',graded_rgb(ic,iq),'LineWidth',1.5},'patchSaturation',.1)
+        
+        legtxt{2*(iq-1)+2} = sprintf('Model Q%d',iq);
     end
+    ylim([.4 1]);
+    xticks(4:4:16)
+    legend(legtxt,'Location','southeast')
+    title(sprintf('Condition: %d',ic))
     hold off
 end
 sgtitle(sprintf('Learning curves\nError bars SEM'))

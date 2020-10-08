@@ -92,7 +92,7 @@ for ic = 1:2
         [elbos_subj_desc(:,:,iq,ic),i_elbos_subj(:,:,iq,ic)] = sort(reshape(elbos(ic,iq,:,:),[nmod,nsubj]),1,'descend');
         % plot
         subplot(2,4,4*(ic-1)+iq)
-        histHandle = histogram(i_elbos_subj(1,:,iq,ic),[1:9]);
+        histHandle = histogram(i_elbos_subj(1,:,iq,ic),[1:9],'FaceColor',graded_rgb(ic,iq));
         histHandle.BinEdges = histHandle.BinEdges - histHandle.BinWidth/2;
         hold on
         ticklabels = sprintf('%s\\newline%s\\newline%s\n',...
@@ -102,10 +102,9 @@ for ic = 1:2
         xticks(1:8)
         xlim([0 9])
         xticklabels(ticklabels)
-        title('Winning model counts for each condition and quarter')
-        hold off
     end
 end
+sgtitle('Winning model counts for each condition and quarter')
 
 % calculate Bayes factors
 bayesfacs = nan(nmod,nsubj,4,2);
@@ -122,7 +121,9 @@ for ic = 1:2
     end
 end
 
-% plot Bayes factor heatmap for specific condition and quarter
+% plot Bayes factor heatmap for specific condition and 
+% > press the up/down arrows to change conditions
+% > press the left/right arrows to change quarters
 ic_p = 1;
 iq_p = 1;
 figure(2)
@@ -161,7 +162,7 @@ for ic = 1:2
         [alpha(:,:,ic,iq),pexp(:,:,ic,iq),pexc(:,:,ic,iq)] = spm_BMS(squeeze(elbos(ic,iq,:,:))');
         
         subplot(2,4,4*(ic-1)+iq)
-        bar(1:nmod,pexc(:,:,ic,iq),'FaceColor',graded_rgb(ic,iq),'EdgeColor',[0 0 0]);
+        bar(1:nmod,pexc(:,:,ic,iq),'FaceColor',graded_rgb(ic,iq),'EdgeColor',[1 1 1]);
         ticklabels = sprintf('%s\\newline%s\\newline%s\n',...
                     [convertCharsToStrings(extractBetween(modstr,1,4));...
                      convertCharsToStrings(extractBetween(modstr,6,9));...
@@ -172,6 +173,12 @@ for ic = 1:2
     end
 end
 sgtitle('Exceedance probabilities of each model for each condition and quarter')
+
+% > The priorbias towards subjects' first response with argmax choice wins almost
+%   all quarters in both the Repeating and Alternating conditions. 
+% > The epsibias toward subjects' first response with argmax choice wins in the
+%   3rd and 4th quarters in the Repeating condition.
+% > Investigate qualitative measures in the check_fit_batch_KFbiased script.
 
 
 %% Local functions

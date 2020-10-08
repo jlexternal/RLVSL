@@ -204,7 +204,7 @@ end
 sgtitle(sprintf('Condition: %d\nQuarter: %d',ic_plot,iq_plot))
 
 %% calculate learning curves across the quarters
-addpath('../../')
+addpath('../')
 
 figure
 for ic = 1:nc
