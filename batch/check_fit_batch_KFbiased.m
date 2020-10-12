@@ -2,6 +2,8 @@
 %
 % Objective: Check fitted parameters for the biased KF model 
 %
+% Version:   Code for fits from the fit_noisyKF_epsibias.m fitting code (pre 12 Oct 2020)
+%
 % Jun Seok Lee <jlexternal@gmail.com>
 
 clear all
@@ -124,13 +126,18 @@ for imod = 1:nmod
         end
     end
 end
+
+% ----------- define conditions and quarters ----------- 
+cond_sim = [1];
+quar_sim = [1:4];
+% ------------------------------------------------------
 %% Visualize evolution of fitted parameters over time in each condition
 condstr = {'Repeating','Alternating'};
 parstr  = {'kini','kinf','zeta','epsi','theta'}; 
 for imod = 1:nmod
     figure
     for ic = 1
-        subplot(2,1,ic)
+        subplot(length(cond_sim),1,ic)
         hold on
         yline(0,'--','Color',[.8 .8 .8],'HandleVisibility','off');
         yline(1,'--','Color',[.8 .8 .8],'HandleVisibility','off');
@@ -180,11 +187,6 @@ for imod = 1:nmod
 end
 
 %% Simulate models with fitted parameters for given set of conditions and quarters
-
-% ----------- define conditions and quarters ----------- 
-cond_sim = [1];
-quar_sim = [1:4];
-% ------------------------------------------------------
 
 sim_out = cell(max(cond_sim),max(quar_sim),nsubjtot,nmod);
 for imod = 1:nmod

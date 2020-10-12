@@ -4,6 +4,8 @@
 %             condition. Simulate models on the repeating and alternating conditions 
 %             with the fitted parameters and identify blocks that are easy.
 %
+% Version:   Code for fits from the fit_noisyKF_epsibias.m fitting code (pre 12 Oct 2020)
+%
 % Jun Seok Lee <jlexternal@gmail.com>
 
 clear all
