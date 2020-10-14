@@ -9,7 +9,8 @@
 
 clear all;
 close all;
-addpath('./Toolboxes');
+addpath('./Toolboxes')
+addpath('./functions_local')
 
 % Load subject data
 nsubjtot    = 31;

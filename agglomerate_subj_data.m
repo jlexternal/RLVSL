@@ -7,7 +7,8 @@
 %
 % Jun Seok Lee <jlexternal@gmail.com>
 
-addpath('./Toolboxes');
+addpath('./Toolboxes')
+addpath('./functions_local')
 
 % Load subject data
 nsubjtot    = 31;

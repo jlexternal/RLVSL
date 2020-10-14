@@ -6,7 +6,8 @@
 
 clc;
 clear all;
-addpath('./vbmc');
+addpath('./vbmc')
+addpath('./functions_local')
 % Experimental parameters
 nb = 16;
 nt = 16;

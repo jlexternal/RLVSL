@@ -52,6 +52,9 @@ end
 if ~isfield(cfg,'ievent')
     error('Indicate which event (1/STIM 2/RESP 3/FBCK 4/END) is considered the onset event.');
 end
+if ~ismember(cfg.ievent,1:4)
+    error('ievent must an integer value from 1 to 4!');
+end
 ievent = cfg.ievent; % onset event : 1/STIM 2/RESP 3/FBCK 4/END
 if ~isfield(cfg,'ievent_end')
     ievent_end = 4;

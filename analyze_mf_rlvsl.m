@@ -10,10 +10,9 @@ condtypes = ["Repeating","Alternating","Random"];
 %% Load data
 ifig = 1;
 nsubjtot    = 31;
-excluded    = [1];
+excluded    = [1 23 28];
 subjlist    = setdiff(1:nsubjtot, excluded);
-subparsubjs = [excluded 11 23 28];
-subjlist = setdiff(1:nsubjtot, subparsubjs); % if excluding underperforming/people who didn't get it
+nsubj = numel(subjlist);
 % load experiment structure
 nsubj = numel(subjlist);
 % Data manip step
@@ -117,6 +116,8 @@ for iq = 1:4
         for is = 1:numel(subjlist)
             ind_subj_quarterly_acc_mean(is,:,ic,iq) = mean(resps(blockindex,:,ic,subjlist(is)));
             ind_subj_quarterly_rt_mean(is,:,ic,iq)  = mean(rts(blockindex,:,ic,subjlist(is)));
+            
+            
         end
         quarterly_acc_mean(iq,:,ic) = mean(ind_subj_quarterly_acc_mean(:,:,ic,iq));
         quarterly_rt_mean(iq,:,ic)  = mean(ind_subj_quarterly_rt_mean(:,:,ic,iq));
@@ -267,6 +268,9 @@ end
 hold off;
 
 %% Plot: Mean trial RT trajectories by condition by quarter
+
+trialrange = 2:nt; % removing 1st trial reaction time as all are outliers
+
 figure(ifig);
 ifig = ifig + 1;
 clf;
@@ -274,13 +278,97 @@ hold on;
 for ic = 1:3
     for iq = 1:4
         subplot(1,3,ic);
-        plot(1:nt,quarterly_rt_mean(iq,:,ic),'LineWidth',2,'Color', graded_rgb(ic,iq,4));        
-        shadedErrorBar(1:nt,quarterly_rt_mean(iq,:,ic),quarterly_rt_sem(iq,:,ic),'lineprops',{'Color',graded_rgb(ic,iq,4)});
+        plot(trialrange,quarterly_rt_mean(iq,trialrange,ic),'LineWidth',2,'Color', graded_rgb(ic,iq,4));        
+        shadedErrorBar(trialrange,quarterly_rt_mean(iq,trialrange,ic),quarterly_rt_sem(iq,trialrange,ic),'lineprops',{'Color',graded_rgb(ic,iq,4)});
         ylim([.4 2]);
         hold on;
     end
 end
 hold off;
+
+
+
+%% test
+
+ncond = 3;
+rt_mean_b    = nan(ncond,nb_c,nsubj);
+cv_b        = nan(ncond,nb_c,nsubj);
+
+% organize data
+jsubj = 1;
+for isubj = subjlist
+    for icond = 1:3
+        for ib = 1:nb_c
+            blockrange = 4*(iq-1)+1:4*(iq-1)+4;
+            trialrange = 2:nt; % removing 1st trial reaction time as all are outliers
+            rt_mean_b(icond,ib,jsubj)   = mean(rts(ib,trialrange,icond,isubj),'all');
+            cv_b(icond,ib,jsubj)        = std(rts(ib,trialrange,icond,isubj),1,'all')/rt_mean_b(icond,ib,jsubj);
+        end
+        pvs(icond,:,jsubj) = polyfit(rt_mean_b(icond,:,jsubj),cv_b(icond,:,jsubj),1);
+        plot(0:2,polyval(pvs(icond,:,jsubj),0:2),'Color',graded_rgb(icond,4,4))
+        ylim([0 1.5])
+        hold on
+    end
+    hold off
+    pause
+    
+    jsubj = jsubj + 1;
+end
+%% Plot: Coefficient of variation vs mean RT
+ncond = 3;
+rt_mean_q    = nan(ncond,4,nsubj);
+cv_q        = nan(ncond,4,nsubj);
+clearvars pvs
+% organize data
+jsubj = 1;
+for isubj = subjlist
+    for icond = 1:3
+        for iq = 1:4
+            blockrange = 4*(iq-1)+1:4*(iq-1)+4;
+            trialrange = 2:nt; % removing 1st trial reaction time as all are outliers
+            rt_mean_q(icond,iq,jsubj)   = mean(rts(blockrange,trialrange,icond,isubj),'all');
+            cv_q(icond,iq,jsubj)        = (1+(4*nsubj)^-1)*std(rts(blockrange,trialrange,icond,isubj),1,'all')/rt_mean_q(icond,iq,jsubj);
+        end
+        pvs(icond,:) = polyfit(rt_mean_q(icond,:,:),cv_q(icond,:,:),1);
+    end
+    
+    
+    jsubj = jsubj + 1;
+end
+
+% plot
+markers = {'o','x','s','d'};
+figure
+hold on
+legtxt = {};
+legctr = 1;
+for ic = 1:3
+    for iq = 1:4
+        scatter(rt_mean_q(ic,iq,:),cv_q(ic,iq,:),40,markers{iq},'MarkerEdgeColor',graded_rgb(ic,4,4),'MarkerEdgeAlpha',.1,'LineWidth',1.2,'HandleVisibility','off');
+        
+        %plot(0:.01:2,polyval(pvs(ic,:),0:.01:2),'Color',graded_rgb(ic,4,4))
+        
+        % ! Below calculates the mean of the coefficient of varation, but this is not a
+        %   sound analysis as CV is a manipulated measure and not one directly
+        %   calculated from the data.
+        
+        scatter(mean(rt_mean_q(ic,iq,:)),mean(cv_q(ic,iq,:)),80,markers{iq},'MarkerEdgeColor',graded_rgb(ic,4,4),'LineWidth',2);
+        errorbar(mean(rt_mean_q(ic,iq,:)),mean(cv_q(ic,iq,:)),std(cv_q(ic,iq,:)),'Color',graded_rgb(ic,4,4),'HandleVisibility','off','CapSize',0)
+        errorbar(mean(rt_mean_q(ic,iq,:)),mean(cv_q(ic,iq,:)),std(rt_mean_q(ic,iq,:))/sqrt(nsubj),...
+                 'horizontal','Color',graded_rgb(ic,4,4),'HandleVisibility','off','CapSize',0)
+        %}
+             
+        legtxt{legctr} = sprintf('Cond %d, Q%d',ic,iq);
+        legctr = legctr + 1;
+    end
+end
+legend(legtxt,'Location','southeast')
+set(gca,'TickDir','out');
+xlabel('mean RT')
+ylabel('CV')
+title('Coefficient of variation of RT vs. mean RT')
+
+
 
 %% Plot: Ensure distribution of rewards seen in each condition
 figure(ifig);

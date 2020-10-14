@@ -4,6 +4,7 @@
 
 
 clear all;
+addpath('./functions_local')
 
 % subjects to be included in analysis
 nsubjtot    = 31;
@@ -18,8 +19,9 @@ nc = numel(condtypes);
 epc_struct = {};
 cfg = [];
 cfg.incl_nan = true;
+cfg.ievent   = 3;
 for icond = 1:nc
-    epc_struct{icond} = pupil_get_epochs(subjlist,condtypes{icond},cfg);
+    epc_struct{icond} = pupil_get_epochs(subjlist,cfg);
 end
 
 % choose the smallest epoch window for comparison

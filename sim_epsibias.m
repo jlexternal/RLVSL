@@ -21,7 +21,7 @@ fv = @(k)fzero(@(v)fk(v)-min(max(k,0.001),0.999),vs.*2.^[-30,+30]);
 % Assumptions of the model
 sbias_cor = false;   % 1st-choice bias toward the correct structure
 sbias_ini = false;   % KF means biased toward the correct structure
-cscheme = 'qvs';    % 'arg'-argmax; 'qvs'-softmax;      'ths'-Thompson sampling
+cscheme = 'ths';    % 'arg'-argmax; 'qvs'-softmax;      'ths'-Thompson sampling
 lscheme = 'sym';    % 'ind'-independent action values;  'sym'-symmetric action values
 nscheme = 'upd';    % 'rpe'-noise scaling w/ RPE;       'upd'-noise scaling w/ value update
 % Model parameters
@@ -55,14 +55,6 @@ kinis = [.9];%.5:.1:1;
 kinfs = [.1];%0:.1:.4;
 thetas = 0; %[0 .2 .4 .6 .8 1];
 param_sets = {};
-
-% reparametrizing theta for the different choice schemes
-switch cscheme
-    case 'qvs' % regular softmax
-        thetas = thetas;
-    case 'ths' % Thompson sampling
-        thetas = thetas*2;
-end
 
 % define parameter sets
 p_ctr = 0;

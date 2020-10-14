@@ -252,7 +252,6 @@ ylim([-.9 .1]);
 legend({'Repeating','Random (locked to Rep.)','Alternating','Random (locked to Alt.)'},'Location','southeast');
 title(sprintf('Effect of feedback value on reaction times\n(%d/%d subjects) Error bars: SEM',size(coefs_rt_fb_epiph_rnd,1),nsubj),'FontSize',12);
 
-
 %% 3a. Organize: Correlation of RTs and feedback magnitude grouped on BIASED vs UNBIASED blocks
 
 % Load epsilon-greedy percentages

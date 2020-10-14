@@ -3,6 +3,7 @@
 % Usage: Analysis of pupillometric measures with reaction times
 
 clear all;
+addpath('./functions_local')
 
 % subjects to be included in analysis
 nsubjtot    = 31;
@@ -70,12 +71,13 @@ if usecfg
     cfg = struct;
     %cfg.polyorder = 20; % default is nt
     cfg.r_ep_lim = 4; % set the rightward limit of epoch window
+    cfg.ievent = 3;
 end
 for icond = 1:nc
     if usecfg
-        epc_struct{icond} = pupil_get_epochs(subjlist,condtypes{icond},cfg);
+        epc_struct{icond} = pupil_get_epochs(subjlist,cfg);
     else
-        epc_struct{icond} = pupil_get_epochs(subjlist,condtypes{icond});
+        epc_struct{icond} = pupil_get_epochs(subjlist);
     end
 end
 % choose the smallest epoch window for comparison

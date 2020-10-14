@@ -1,6 +1,7 @@
 %pupil_flexible_epoch_testing
 clear all;
-addpath('./Toolboxes/NoiseTools');
+addpath('./Toolboxes/NoiseTools')
+addpath('./functions_local')
 
 nsubjtot    = 31;
 excluded    = [1 23 28];
