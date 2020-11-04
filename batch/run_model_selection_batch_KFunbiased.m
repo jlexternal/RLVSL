@@ -4,6 +4,8 @@
 %             model on the random condition and choose which set of options best fit the
 %             subjects' data.
 %
+% Version:   Code for fits from the fit_noisyKF_epsibias.m fitting code (pre 12 Oct 2020)
+%
 % Jun Seok Lee <jlexternal@gmail.com>
 
 % loop through and store in local memory

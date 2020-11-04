@@ -1,0 +1,56 @@
+% study_empirical_prior
+
+
+load('out_fit_noisyKF');
+
+nsubjtot    = 31;
+excluded    = [1 23 28];
+subjlist    = setdiff(1:nsubjtot, excluded);
+nsubj = numel(subjlist);
+
+params_fit = nan(4,3,5,nsubj); % param, cond, time, subj
+pars_trans = nan(4,3,5,nsubj);
+
+for isubj = 1:nsubj
+    for icond = 1:2
+        for itime = 1:4
+            for ipar = 1:4
+                params_fit(ipar,icond,itime,isubj) = out_fit_all{icond,itime,isubj}.xmap(ipar);
+            end
+        end
+    end
+
+    for ipar = 1:4
+        params_fit(ipar,3,5,isubj) = out_fit_all{3,5,isubj}.xmap(ipar);
+        if ismember(ipar,1:2)
+            pars_trans(ipar,3,5,isubj) = log(params_fit(ipar,3,5,isubj)) - log(1-)
+        else
+            
+        end
+        
+    end
+end
+
+%%
+
+nbins = 6;
+for ipar = 1:4
+    
+    for icond = 1:2
+        figure(icond)
+        for itime = 1:4
+            subplot(4,4,4*(itime-1)+ipar)
+            histfit(squeeze(params_fit(ipar,icond,itime,:)),6,'Normal');
+        end
+    end
+    
+    figure(3)
+    subplot(1,4,ipar)
+    histogram(params_fit(ipar,3,5,:),'Normalization','probability');
+    
+    
+end
+
+
+
+

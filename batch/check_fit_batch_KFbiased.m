@@ -271,7 +271,7 @@ for isubj = subjlist
     end
 end
 
-%% calculate learning curves
+%% plot learning curves
 leg_ctr = 1;
 mod_lstyle = {'--',':','-o','-x'};
 figure
