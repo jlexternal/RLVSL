@@ -23,9 +23,9 @@ for isubj = subjlist
     
     % load file
     filename = sprintf('./param_fit_noisyKF/rep_alt/out_fit_noisyKF_rep_alt_%d_%d.mat',nsubj,isubj);
-    out_new = load(filename);
-    filename = sprintf('./param_fit_PF_KFpriorbias/out/out_fit_KFpriorbias_theta_biasSubj_tsu_%d_%02d.mat',nsubj,isubj);
     out_old = load(filename);
+    filename = sprintf('./param_fit_PF_KFpriorbias_empPrior/out/out_fit_KFempPrior_tsu_%d_%02d.mat',nsubj,isubj);
+    out_new = load(filename);
     
     for ic = 1:2
         for iq = 1:4
@@ -35,11 +35,11 @@ for isubj = subjlist
     end
     filename = sprintf('./param_fit_noisyKF/rnd/out_fit_noisyKF_rnd_%d_%d.mat',nsubj,isubj);
     load(filename);
-    out_fit_all{3,5,jsubj} = out_fit{3,5,isubj};
+    out_fit_old{3,5,jsubj} = out_fit{3,5,isubj};
     
-    filename = sprintf('./param_fit_PF_KFunbiased/options_fit/out_fit_KFunbiased_ths_sym_upd_28_%02d.mat',isubj);
+    filename = sprintf('./param_fit_PF_KFpriorbias_empPrior/out/out_fit_KFempPrior_tsu_%d_%02d.mat',nsubj,isubj);
     load(filename);
-    out_fit_old{3,5,jsubj} = out_fit{3,isubj};
+    out_fit_all{3,5,jsubj} = out_fit{3,5,isubj};
 end
 clearvars out_fit out_old out_new
 
@@ -342,7 +342,7 @@ excluded    = [1 23 28];
 subjlist    = setdiff(1:nsubjtot, excluded);
 nsubj = numel(subjlist);
 
-sbias = 'xmap';
+sbias = 'sanity_check2';
 
 for isubj = 1:nsubj
     % load file

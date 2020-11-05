@@ -35,13 +35,12 @@ cfg = [];
 cfg.vs = vs;
 cfg.ms = ms;
 cfg.nsmp = 1e3;
-
+cfg.nres = 1e3;
+cfg.nval = 1e2;
 % ------------------ model options ------------------
-cfg.sbias_cor   = false; % assume prior bias toward subject response
 cfg.sbias_ini   = true;  % assume initial prior bias
 cfg.epsi        = 0;     % no epsilon-greedy type bias
 %cfg.theta       = 0;    % fit softmax (inv) temperature
-cfg.ksi         = 0;     % assume no learning noise bias
 
 % ------------------ options from fitting unbiased KF model on the novel/random condition ------------
 cfg.cscheme = 'ths';    % qvs:Q-value sampling          or ths:Thompson sampling

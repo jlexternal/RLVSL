@@ -1,0 +1,60 @@
+% check_fit_batch_noisyKF_empPrior
+
+clear all
+clc
+addpath('..');
+%% Data organization
+% gather all out_fit structures into 1 file
+nsubjtot    = 31;
+excluded    = [1 23 28];
+subjlist    = setdiff(1:nsubjtot, excluded);
+nsubj = numel(subjlist);
+
+out_fit_all = cell(3,5,nsubj);
+params      = nan(3,5,nsubj,4);
+
+for isubj = subjlist
+    jsubj = find(subjlist==isubj);
+    
+    % load file
+    filename = sprintf('./param_fit_PF_KFpriorbias_empPrior/out/out_fit_KFempPrior_tsu_%d_%02d.mat',nsubj,isubj);
+    load(filename);
+    
+    for ic = 1:3
+        if ic ~= 3
+            for iq = 1:4
+                out_fit_all{ic,iq,jsubj} = out_fit{ic,iq,isubj};
+                for ip = 1:4
+                    if ip < 3
+                        params(ic,iq,jsubj,ip) = 1/(1+exp(-out_fit{ic,iq,isubj}.xmap(ip)));
+                    else
+                        params(ic,iq,jsubj,ip) = exp(out_fit{ic,iq,isubj}.xmap(ip));
+                    end
+                end
+            end
+        else
+            out_fit_all{ic,5,jsubj} = out_fit{ic,5,isubj};
+            for ip = 1:4
+                if ip < 3
+                    params(ic,5,jsubj,ip) = 1/(1+exp(-out_fit{ic,5,isubj}.xmap(ip)));
+                else
+                    params(ic,5,jsubj,ip) = exp(out_fit{ic,5,isubj}.xmap(ip));
+                end
+            end
+        end
+    end
+end
+clearvars out_fit
+
+
+%% 
+figure
+hold on
+for ip = 1:4
+    subplot(4,1,ip);
+    for ic = 1:2
+        shadedErrorBar(1:4,mean(params(ic,1:4,:,ip),3),std(params(ic,1:4,:,ip),1,3)/sqrt(nsubj));
+    end
+    shadedErrorBar(mean(params(3,5,:,ip),3));
+end
+
