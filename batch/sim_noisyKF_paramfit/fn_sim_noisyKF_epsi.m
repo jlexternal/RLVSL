@@ -1,4 +1,4 @@
-function fn_sim_noisyKF_paramfit(isubj)
+function fn_sim_noisyKF_epsi(isubj)
 
 % fn_sim_noisyKF_paramfit
 %
@@ -8,7 +8,7 @@ function fn_sim_noisyKF_paramfit(isubj)
 % Jun Seok Lee <jlexternal@gmail.com>
 
 
-% function based on subject (3 cond x 4 quar = 12 minutes per subject)
+% function based on subject (3cond x 4 quar = 12 minutes per subject)
 
 nbatch = 28;
 
@@ -29,87 +29,59 @@ cfg = struct;
 cfg.nt = 16;
 cfg.ms = .55;   cfg.vs = .07413^2; 
 cfg.sbias_cor = false;  
-cfg.sbias_ini = true;
+cfg.sbias_ini = false;
 cfg.cscheme = 'ths';  cfg.lscheme = 'sym';  cfg.nscheme = 'upd';
-cfg.ns      = 2500; % 100 simulations take around 35 seconds per subject 
+cfg.ns      = 100; % 100 simulations take around 35 seconds per subject 
 cfg.ksi     = 0;
-cfg.epsi    = 0;
+%cfg.epsi    = 0;   % simulating with epsi 
 cfg.sameexpe = true;    % true if all sims see the same reward scheme
 
 resp_sim = nan(4,16,cfg.ns,3,4,nbatch); % block, trial, nsims, condition, quarter, subject
 
 issampling = false;
-isempprior = true;
+isempprior = false;
 fprintf('Simulating subject %d...\n',isubj)
 isubj_abs = subjlist(isubj);
 
-if isempprior
-    load('out_fit_all_empPrior','out_fit_all');
-else
-    load('out_fit_all','out_fit_all');
-end
+load('out_fit_all_epsi','out_fit_all');
 
 for icond = 1:3
     fprintf('  Simulating condition %d...\n',icond)
     cfg.nb = 4;
-    for iq = 1:5
-        if iq < 5
-            cfg.nb = 4;
-            blockrange = 4*(iq-1)+1:4*(iq-1)+4;
-        else
-            if icond ~= 3
-                continue
-            else
-                cfg.nb = 16;
-                blockrange = 1:16;
-            end
-        end
+    for iq = 1:4
+        blockrange = 4*(iq-1)+1:4*(iq-1)+4;
+
         cfg.compexpe    = subj_resp_rew_all(isubj_abs).rew_expe(blockrange,:,icond)/100;
         cfg.firstresp   = subj_resp_rew_all(isubj_abs).resp(blockrange,1,icond);
         
         if issampling
-            % use samples drawn from posterior distribution of parameters
-            if icond ~= 3
-                params_smpd = vbmc_rnd(out_fit_all{icond,iq,isubj}.vp,cfg.ns);
-            else
-                params_smpd = vbmc_rnd(out_fit_all{icond,5,isubj}.vp,cfg.ns);
-            end
+            params_smpd = vbmc_rnd(out_fit_all{icond,iq,isubj}.vp,cfg.ns);
             cfg.kini    = params_smpd(:,1);
             cfg.kinf    = params_smpd(:,2);
             cfg.zeta    = params_smpd(:,3);
             cfg.theta   = params_smpd(:,4);
+            cfg.epsi    = params_smpd(:,5);
         else
             % use xmap (maximum a posteriori estimate)
-            if icond ~= 3
-                params_smpd = out_fit_all{icond,iq,isubj}.xmap;
-            else
-                params_smpd = out_fit_all{icond,5,isubj}.xmap;
-            end
+            params_smpd = out_fit_all{icond,iq,isubj}.xmap;
             cfg.kini    = params_smpd(1)*ones(cfg.ns,1);
             cfg.kinf    = params_smpd(2)*ones(cfg.ns,1);
             cfg.zeta    = params_smpd(3)*ones(cfg.ns,1);
             cfg.theta   = params_smpd(4)*ones(cfg.ns,1);
+            cfg.epsi    = params_smpd(5);
         end
         
-        % retransform from normally-distributed parameter to true parameter
+        % retransform parameters from normally-distributed parameter to true parameter
         if isempprior
-            bounds      = [0 0; 0 0; 0 5; 0 10];
-            cfg.kini    = 1./(1+exp(-cfg.kini));
-            cfg.kinf    = 1./(1+exp(-cfg.kinf));
-            cfg.zeta 	= bounds(3,2)./(exp(-cfg.zeta)+1);
-            cfg.theta   = bounds(4,2)./(exp(-cfg.theta)+1);
+            bounds  = [0 0; 0 0; 0 5; 0 10];
+            cfg.kini = 1./(1+exp(-cfg.kini));
+            cfg.kinf = 1./(1+exp(-cfg.kinf));
+            cfg.zeta = bounds(3,2)./(exp(-cfg.zeta)+1);
+            cfg.theta = bounds(4,2)./(exp(-cfg.theta)+1);
         end
         
         sim_out = sim_noisyKF_fn(cfg);
-        
-        if iq < 5
-            resp_sim(:,:,:,icond,iq,isubj) = sim_out.resp;
-        else
-            for jq = 1:4
-                blockrange = 4*(jq-1)+1:4*(jq-1)+4;
-                resp_sim(:,:,:,icond,jq,isubj) = sim_out.resp(blockrange,:,:);
-            end
-        end
+        resp_sim(:,:,:,icond,iq,isubj) = sim_out.resp;
     end
 end
 

@@ -18,13 +18,15 @@ nsubj = numel(subjlist);
 out_fit_all = cell(3,5,nsubj);
 out_fit_old = cell(3,5,nsubj);
 
+rnd_allq = false;
+
 for isubj = subjlist
     jsubj = find(subjlist==isubj);
     
     % load file
     filename = sprintf('./param_fit_noisyKF/rep_alt/out_fit_noisyKF_rep_alt_%d_%d.mat',nsubj,isubj);
     out_old = load(filename);
-    filename = sprintf('./param_fit_PF_KFpriorbias_empPrior/out/out_fit_KFempPrior_tsu_%d_%02d.mat',nsubj,isubj);
+    filename = sprintf('./param_fit_PF_KFpriorbias_empPrior/out_4/out_fit_KFempPrior_tsu_%d_%02d.mat',nsubj,isubj);
     out_new = load(filename);
     
     for ic = 1:2
@@ -33,18 +35,63 @@ for isubj = subjlist
             out_fit_old{ic,iq,jsubj} = out_old.out_fit{ic,iq,isubj};
         end
     end
+    
+    % rnd condition fits
     filename = sprintf('./param_fit_noisyKF/rnd/out_fit_noisyKF_rnd_%d_%d.mat',nsubj,isubj);
     load(filename);
-    out_fit_old{3,5,jsubj} = out_fit{3,5,isubj};
-    
-    filename = sprintf('./param_fit_PF_KFpriorbias_empPrior/out/out_fit_KFempPrior_tsu_%d_%02d.mat',nsubj,isubj);
-    load(filename);
-    out_fit_all{3,5,jsubj} = out_fit{3,5,isubj};
+    if rnd_allq % when all quarters fitted together
+        out_fit_old{3,5,jsubj} = out_fit{3,5,isubj};
+
+        filename = sprintf('./param_fit_PF_KFpriorbias_empPrior/out/out_fit_KFempPrior_tsu_%d_%02d.mat',nsubj,isubj);
+        load(filename);
+        out_fit_all{3,5,jsubj} = out_fit{3,5,isubj};
+    else % when quarters fitted separately on the random condition
+        for iq = 1:4
+            out_fit_old{3,iq,jsubj} = out_fit{3,iq,isubj};
+        end
+        % fits from when all quarters fitted together (uniform prior)
+        filename = sprintf('./param_fit_noisyKF/rnd/out1/out_fit_noisyKF_rnd_%d_%d.mat',nsubj,isubj);
+        load(filename);
+        out_fit_all{3,5,jsubj} = out_fit{3,5,isubj}; % using out_fit_all as a temporary hack to store this data
+    end
 end
 clearvars out_fit out_old out_new
 
-%% Check parameter correlation on the random condition
+%% Check parameters on random condition (fitted on each quarter separately)
+xmode = nan(nsubj,4,4); % subj, param, quarter
+xmean = nan(nsubj,4,4);
 
+xmode_fit_all = nan(nsubj,4);
+xmean_fit_all = nan(nsubj,4);
+
+for isubj = 1:nsubj
+    for iq = 1:4
+        xmode(isubj,:,iq) = out_fit_old{3,iq,isubj}.xmap;
+        xmean(isubj,:,iq) = out_fit_old{3,iq,isubj}.xavg;
+    end
+    xmode_fit_all(isubj,:) = out_fit_all{3,5,isubj}.xmap;
+    xmean_fit_all(isubj,:) = out_fit_all{3,5,isubj}.xavg; 
+end
+
+titlestr = {'kini','kinf','zeta','theta'};
+
+% plot of random condition parameter comparisons when fitted over all quarters
+% separately and together from the fit using the uniform prior
+figure
+for ip = 1:4
+    subplot(4,1,ip);
+    scatter(1:4,squeeze(mean(xmode(:,ip,:))),'MarkerEdgeColor',param_rgb(ip),'MarkerFaceColor',param_rgb(ip));
+    hold on
+    errorbar(1:4,squeeze(mean(xmode(:,ip,:))),squeeze(std(xmode(:,ip,:),1,1))/sqrt(nsubj),'LineStyle','none','CapSize',0, ...
+        'Color',param_rgb(ip));
+    shadedErrorBar([1 4],mean(xmode_fit_all(:,ip))*ones(1,2),std(xmode_fit_all(:,ip))/sqrt(nsubj)*ones(1,2),...
+        'lineprops',{'Color',param_rgb(ip),'LineWidth',1.5},'patchSaturation',.2);
+    xlim([0 5])
+    title(titlestr{ip});
+end
+
+%% Check parameter correlation on the random condition (when fitted over all quarters)
+clearvars xmode xmean theta
 xmode = nan(2,nsubj,3);
 xmean = nan(2,nsubj,3);
 theta = nan(1,nsubj);
@@ -209,21 +256,21 @@ sgtitle('theta vs kini on the new fit')
 %% Check posterior distribution of parameters
 
 % cfg
-isubj = 28; % max 28
-icond = 1;
-itime = 4;
+isubj = 12; % max 28
+icond = 3;
+itime = 1;
 
 % dont touch
-bounds_n = [0 1; 0 1; 0 3; 0 3]';
+bounds_n = [0 1; 0 1; 0 3; 0 10]';
 bounds_o = bounds_n;
-if icond == 3
+if false %icond == 3
     itime = 5;
-    bounds_o = [0 1; 0 1; 0 3]';
+    bounds_o = [0 1; 0 1; 0 3; 0 10]';
 end
 condstr = {'rep','alt','rnd'};
 
-cornerplot(vbmc_rnd(out_fit_all{icond,itime,isubj}.vp,1e5),out_fit_all{icond,itime,isubj}.xnam,[],bounds_n);
-sgtitle(sprintf('new fit, cond %s, quar %d, subj %d',condstr{icond},itime,isubj))
+%cornerplot(vbmc_rnd(out_fit_all{icond,itime,isubj}.vp,1e5),out_fit_all{icond,itime,isubj}.xnam,[]);
+%sgtitle(sprintf('new fit, cond %s, quar %d, subj %d',condstr{icond},itime,isubj))
 cornerplot(vbmc_rnd(out_fit_old{icond,itime,isubj}.vp,1e5),out_fit_old{icond,itime,isubj}.xnam,[],bounds_o);
 sgtitle(sprintf('old fit, cond %s, quar %d, subj %d',condstr{icond},itime,isubj))
 
@@ -322,42 +369,11 @@ for isubj = 1:4%:nsubj
                 for jq = 1:4
                     blockrange = 4*(jq-1)+1:4*(jq-1)+4;
                     resp_sim(:,:,:,icond,jq,isubj) = sim_out.resp(blockrange,:,:);
-                    
-                    % this is producing some very strange curves....
-                    % 1/ Check the simulator on some extreme parameter values to ensure
-                    %       that it is functioning properly
-                    % 2/ It may be that the vectorized version of the sampled
-                    %       parameters are not being processed properly for it > 1
                 end
             end
         end
     end
 end
-
-%% Import data from batch-ran model simulations
-clear all
-
-nsubjtot    = 31;
-excluded    = [1 23 28];
-subjlist    = setdiff(1:nsubjtot, excluded);
-nsubj = numel(subjlist);
-
-sbias = 'sanity_check2';
-
-for isubj = 1:nsubj
-    % load file
-    filename = sprintf('./sim_noisyKF_paramfit/out_%s/out_resp_sim_noisyKF_%02d_%02d.mat',sbias,nsubj,isubj);
-    sim_out = load(filename);
-    
-    if isubj == 1
-        resp_sim = nan(4,16,size(sim_out.resp_sim,3),3,4,nsubj);
-    end
-    % transfer data
-    resp_sim(:,:,:,:,:,isubj) = sim_out.resp_sim(:,:,:,:,:,isubj);
-end
-
-load('subj_resp_rew_all')
-
 
 %% plot learning curves
 
@@ -410,4 +426,13 @@ function rgb = graded_rgb(ic,iq)
     rgb = cat(3,rgb,blu);
     
     rgb = rgb(iq,:,ic);
+end
+
+function rgb = param_rgb(ip)
+    rgb = [ 40 36 36;...
+            66 61 61;...
+            52 77 91;...
+            69 50 67]...
+            /100;
+    rgb = rgb(ip,:);
 end

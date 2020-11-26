@@ -286,8 +286,6 @@ for ic = 1:3
 end
 hold off;
 
-
-
 %% test
 
 ncond = 3;
@@ -314,6 +312,7 @@ for isubj = subjlist
     
     jsubj = jsubj + 1;
 end
+
 %% Plot: Coefficient of variation vs mean RT
 ncond = 3;
 rt_mean_q    = nan(ncond,4,nsubj);
@@ -367,8 +366,6 @@ set(gca,'TickDir','out');
 xlabel('mean RT')
 ylabel('CV')
 title('Coefficient of variation of RT vs. mean RT')
-
-
 
 %% Plot: Ensure distribution of rewards seen in each condition
 figure(ifig);
@@ -651,6 +648,112 @@ ylabel('RT (s)');
 title(sprintf('RT means over different regimes of feedback values\n (Confirmatory vs. Disconfirmatory evidence)'));
 xlim([0 4]);
 
+%% Analyze: MF measure on epiphany split
+
+% Recall: subjs 23 and 28 excluded for performance under random
+% Subjects 15, 17, 20 never expressed comprehensible epiphanies
+
+% Epiphanies are where subjects reported confidence 
+
+run_epiphany_qts; % get epiphany quarters
+
+subjlist_epiph = setdiff(subjlist,[15 17 20]);
+nsubj_epiph = numel(subjlist_epiph);
+pcorr = nan(2,nt,2,2,nsubj_epiph); % p(corr) cond/rnd, trials, rep/alt, pre/post-epiphany, subj 
+prepp = nan(2,nt-1,2,2,nsubj_epiph); % p(repeat previous trial)
+prep1 = nan(2,nt-1,2,2,nsubj_epiph); % p(repeat 1st)
+
+isubj = 1;
+for subj = subjlist_epiph
+    for icond = 1:2
+        for ie = 1:2 % pre/post-epiphany
+            if icond == 1
+                qts = prepost_epiph_rep{subj,ie};
+            else
+                qts = prepost_epiph_alt{subj,ie};
+            end
+            
+            blockrange = [];
+            for qt = qts
+                blockrange = [blockrange 4*(qt-1)+1:4*(qt-1)+4];
+            end
+            
+            pcorr(1,:,icond,ie,isubj) = mean(resps(blockrange,:,icond,subj),1);
+            pcorr(2,:,icond,ie,isubj) = mean(resps(blockrange,:,3,subj),1);
+            
+            prepp(1,:,icond,ie,isubj) = mean(bsxfun(@eq,resps(blockrange,2:nt,icond,subj),resps(blockrange,1:nt-1,icond,subj)),1);
+            prepp(2,:,icond,ie,isubj) = mean(bsxfun(@eq,resps(blockrange,2:nt,3,subj),resps(blockrange,1:nt-1,3,subj)),1);
+            
+            prep1(1,:,icond,ie,isubj) = mean(bsxfun(@eq,resps(blockrange,2:nt,icond,subj),resps(blockrange,1,icond,subj)),1);
+            prep1(2,:,icond,ie,isubj) = mean(bsxfun(@eq,resps(blockrange,2:nt,3,subj),resps(blockrange,1,3,subj)),1);
+        end
+        
+    end
+    isubj = isubj +1;
+end
+
+condstr = {'rep','alt'};
+for icond = 1:2
+    subplot(3,2,icond)
+    shadedErrorBar(1:nt,mean(pcorr(1,:,icond,1,:),5),std(pcorr(1,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'--','Color',graded_rgb2(icond,4)},'patchSaturation',.2);
+    hold on;
+    shadedErrorBar(1:nt,mean(pcorr(2,:,icond,1,:),5),std(pcorr(2,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'--','Color',graded_rgb2(3,4)},'patchSaturation',.2);
+    shadedErrorBar(1:nt,mean(pcorr(1,:,icond,2,:),5),std(pcorr(1,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'Color',graded_rgb2(icond,4)},'patchSaturation',.2);
+    shadedErrorBar(1:nt,mean(pcorr(2,:,icond,2,:),5),std(pcorr(2,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'Color',graded_rgb2(3,4)},'patchSaturation',.2);
+    title(sprintf('%s vs corresponding rnd',condstr{icond}))
+    if icond == 1
+        ylabel('p(correct)');
+        hYLabel = get(gca,'YLabel');
+        set(hYLabel,'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
+    end
+                
+    subplot(3,2,2+icond)
+    shadedErrorBar(2:nt,mean(prep1(1,:,icond,1,:),5),std(prep1(1,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'--','Color',graded_rgb2(icond,4)},'patchSaturation',.2);
+    hold on;
+    shadedErrorBar(2:nt,mean(prep1(2,:,icond,1,:),5),std(prep1(2,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'--','Color',graded_rgb2(3,4)},'patchSaturation',.2);
+    shadedErrorBar(2:nt,mean(prep1(1,:,icond,2,:),5),std(prep1(1,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'Color',graded_rgb2(icond,4)},'patchSaturation',.2);
+    shadedErrorBar(2:nt,mean(prep1(2,:,icond,2,:),5),std(prep1(2,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'Color',graded_rgb2(3,4)},'patchSaturation',.2);
+    if icond == 1
+        ylabel(sprintf('p(repeat\n1st)'));
+        hYLabel = get(gca,'YLabel');
+        set(hYLabel,'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
+    end
+                
+    subplot(3,2,4+icond)
+    shadedErrorBar(2:nt,mean(prepp(1,:,icond,1,:),5),std(prepp(1,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'--','Color',graded_rgb2(icond,4)},'patchSaturation',.2);
+    hold on;
+    shadedErrorBar(2:nt,mean(prepp(2,:,icond,1,:),5),std(prepp(2,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'--','Color',graded_rgb2(3,4)},'patchSaturation',.2);
+    shadedErrorBar(2:nt,mean(prepp(1,:,icond,2,:),5),std(prepp(1,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'Color',graded_rgb2(icond,4)},'patchSaturation',.2);
+    shadedErrorBar(2:nt,mean(prepp(2,:,icond,2,:),5),std(prepp(2,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+                    'lineprops',{'Color',graded_rgb2(3,4)},'patchSaturation',.2);
+    if icond == 1
+        ylabel(sprintf('p(repeat\nprevious)'));
+        hYLabel = get(gca,'YLabel');
+        set(hYLabel,'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
+    end
+end
+sgtitle(sprintf('Model-free measures on epiphany split\n %d/%d subjs',nsubj_epiph,nsubj))
+
+
+
+
+
+
+
+
+
+
 %% Local functions
 function rgb = rgb_ic(ic)
     switch ic
@@ -671,6 +774,18 @@ rgb =  [1,xc(ib),xc(ib); ...
            xc(ib),xc(ib),1];
 
 rgb = rgb(ic,:);
+end
+
+function rgb = graded_rgb2(ic,iq)
+           
+    red = [1.0 .92 .92; .98 .80 .80; .97 .64 .64; .96 .49 .49];
+    gre = [.94 .99 .94; .85 .95 .83; .74 .91 .70; .63 .87 .58];
+    blu = [.93 .94 .98; .78 .85 .94; .61 .74 .89; .44 .63 .84];
+           
+    rgb = cat(3,red,gre);
+    rgb = cat(3,rgb,blu);
+    
+    rgb = rgb(iq,:,ic);
 end
 
 function stars = sigstar(p)

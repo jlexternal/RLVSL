@@ -1,22 +1,27 @@
 % run_epiphany_qts
 
-% Subject 17 is excluded from epiphany analysis 
+% Subject 15, 17, and 20 are excluded from epiphany analysis 
+
+% Assumptions:
+%   1/ A post-epiphany quarter is one where the subject is more than 60% confident
+%   2/ The 1st quarter is always considered pre-epiphany 
+%   3/ A subject can revert their epiphany if confidence decreases after an increase
 
 prepost_epiph_rep = cell(31,2);
 prepost_epiph_alt = cell(31,2);
 
-prepost_epiph_rep{2,1}  = 1:2;      prepost_epiph_alt{2,1} = 1:2;
+prepost_epiph_rep{2,1}  = 1;      prepost_epiph_alt{2,1} = 1:2;
 prepost_epiph_rep{3,1}  = [1 3];    prepost_epiph_alt{3,1} = 1:2;
 prepost_epiph_rep{4,1}  = 1:2;      prepost_epiph_alt{4,1} = 1;
 prepost_epiph_rep{5,1}  = 1;        prepost_epiph_alt{5,1} = 1;
 prepost_epiph_rep{6,1}  = 1;        prepost_epiph_alt{6,1} = 1;
 prepost_epiph_rep{7,1}  = 1;        prepost_epiph_alt{7,1} = 1;
 prepost_epiph_rep{8,1}  = 1:3;      prepost_epiph_alt{8,1} = 1:3;
-prepost_epiph_rep{9,1}  = 1;        prepost_epiph_alt{9,1} = 2:3;
+prepost_epiph_rep{9,1}  = 1;        prepost_epiph_alt{9,1} = [1 4];
 prepost_epiph_rep{10,1} = 1;        prepost_epiph_alt{10,1} = 1;
 prepost_epiph_rep{11,1} = 1:2;      prepost_epiph_alt{11,1} = 1:2;
 prepost_epiph_rep{12,1} = 1;        prepost_epiph_alt{12,1} = 1:2;
-prepost_epiph_rep{13,1} = 2:4;      prepost_epiph_alt{13,1} = [1 3];
+prepost_epiph_rep{13,1} = 1;        prepost_epiph_alt{13,1} = [1 3];
 prepost_epiph_rep{14,1} = 1;        prepost_epiph_alt{14,1} = 1;
 prepost_epiph_rep{16,1} = 1;        prepost_epiph_alt{16,1} = 1:2;
 prepost_epiph_rep{18,1} = 1:2;      prepost_epiph_alt{18,1} = [1 2 4];
