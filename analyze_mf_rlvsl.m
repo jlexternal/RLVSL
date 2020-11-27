@@ -653,15 +653,30 @@ xlim([0 4]);
 % Recall: subjs 23 and 28 excluded for performance under random
 % Subjects 15, 17, 20 never expressed comprehensible epiphanies
 
-% Epiphanies are where subjects reported confidence 
-
+% Epiphanies are where subjects reported confidence > 60%
 run_epiphany_qts; % get epiphany quarters
 
+epiph_left_shift = false; % set to true to shift the epiphany point to the beginning of reporting quarter
+% The left shift analysis is actually not needed since its assumption is already
+% implemented in run_epiphany_qts. The probing of this analysis was done due to a
+% misunderstanding on the epiphany point.
+
+if epiph_left_shift
+    prepost_epiph_alt = cellfun(@(x) x-1,prepost_epiph_alt,'UniformOutput',false);
+    prepost_epiph_rep = cellfun(@(x) x-1,prepost_epiph_rep,'UniformOutput',false);
+end
+
 subjlist_epiph = setdiff(subjlist,[15 17 20]);
-nsubj_epiph = numel(subjlist_epiph);
-pcorr = nan(2,nt,2,2,nsubj_epiph); % p(corr) cond/rnd, trials, rep/alt, pre/post-epiphany, subj 
-prepp = nan(2,nt-1,2,2,nsubj_epiph); % p(repeat previous trial)
-prep1 = nan(2,nt-1,2,2,nsubj_epiph); % p(repeat 1st)
+if epiph_left_shift
+    % the number of data points before/after epiphany will be different with the left
+    % shift 
+    nsubj_epiph = numel(subjlist_epiph)*ones(2,2); % condition, pre/post epiphany
+else
+    nsubj_epiph = numel(subjlist_epiph)*ones(2,2);
+end
+pcorr = nan(2,nt,2,2,numel(subjlist_epiph));   % p(corr)    cond/rnd, trials, rep/alt, pre/post-epiphany, subj 
+prepp = nan(2,nt-1,2,2,numel(subjlist_epiph)); % p(repeat previous trial)
+prep1 = nan(2,nt-1,2,2,numel(subjlist_epiph)); % p(repeat 1st)
 
 isubj = 1;
 for subj = subjlist_epiph
@@ -671,6 +686,13 @@ for subj = subjlist_epiph
                 qts = prepost_epiph_rep{subj,ie};
             else
                 qts = prepost_epiph_alt{subj,ie};
+            end
+            
+            if epiph_left_shift
+                if qts(1)==0 && numel(qts)==1
+                    nsubj_epiph(icond,ie) = nsubj_epiph(icond,ie) - 1;
+                end
+                qts(qts == 0) = [];
             end
             
             blockrange = [];
@@ -693,16 +715,19 @@ for subj = subjlist_epiph
 end
 
 condstr = {'rep','alt'};
+figure;
 for icond = 1:2
+    
+    % p(correct)
     subplot(3,2,icond)
-    shadedErrorBar(1:nt,mean(pcorr(1,:,icond,1,:),5),std(pcorr(1,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(1:nt,mean(pcorr(1,:,icond,1,:),5,'omitnan'),std(pcorr(1,:,icond,1,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,1)),...
                     'lineprops',{'--','Color',graded_rgb2(icond,4)},'patchSaturation',.2);
     hold on;
-    shadedErrorBar(1:nt,mean(pcorr(2,:,icond,1,:),5),std(pcorr(2,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(1:nt,mean(pcorr(2,:,icond,1,:),5,'omitnan'),std(pcorr(2,:,icond,1,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,1)),...
                     'lineprops',{'--','Color',graded_rgb2(3,4)},'patchSaturation',.2);
-    shadedErrorBar(1:nt,mean(pcorr(1,:,icond,2,:),5),std(pcorr(1,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(1:nt,mean(pcorr(1,:,icond,2,:),5,'omitnan'),std(pcorr(1,:,icond,2,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,2)),...
                     'lineprops',{'Color',graded_rgb2(icond,4)},'patchSaturation',.2);
-    shadedErrorBar(1:nt,mean(pcorr(2,:,icond,2,:),5),std(pcorr(2,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(1:nt,mean(pcorr(2,:,icond,2,:),5,'omitnan'),std(pcorr(2,:,icond,2,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,2)),...
                     'lineprops',{'Color',graded_rgb2(3,4)},'patchSaturation',.2);
     title(sprintf('%s vs corresponding rnd',condstr{icond}))
     if icond == 1
@@ -710,32 +735,34 @@ for icond = 1:2
         hYLabel = get(gca,'YLabel');
         set(hYLabel,'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
     end
-                
+    
+    % p(repeat 1st response)
     subplot(3,2,2+icond)
-    shadedErrorBar(2:nt,mean(prep1(1,:,icond,1,:),5),std(prep1(1,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(2:nt,mean(prep1(1,:,icond,1,:),5,'omitnan'),std(prep1(1,:,icond,1,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,1)),...
                     'lineprops',{'--','Color',graded_rgb2(icond,4)},'patchSaturation',.2);
     hold on;
-    shadedErrorBar(2:nt,mean(prep1(2,:,icond,1,:),5),std(prep1(2,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(2:nt,mean(prep1(2,:,icond,1,:),5,'omitnan'),std(prep1(2,:,icond,1,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,1)),...
                     'lineprops',{'--','Color',graded_rgb2(3,4)},'patchSaturation',.2);
-    shadedErrorBar(2:nt,mean(prep1(1,:,icond,2,:),5),std(prep1(1,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(2:nt,mean(prep1(1,:,icond,2,:),5,'omitnan'),std(prep1(1,:,icond,2,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,2)),...
                     'lineprops',{'Color',graded_rgb2(icond,4)},'patchSaturation',.2);
-    shadedErrorBar(2:nt,mean(prep1(2,:,icond,2,:),5),std(prep1(2,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(2:nt,mean(prep1(2,:,icond,2,:),5,'omitnan'),std(prep1(2,:,icond,2,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,2)),...
                     'lineprops',{'Color',graded_rgb2(3,4)},'patchSaturation',.2);
     if icond == 1
         ylabel(sprintf('p(repeat\n1st)'));
         hYLabel = get(gca,'YLabel');
         set(hYLabel,'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
     end
-                
+    
+    % p(repeat previous response)
     subplot(3,2,4+icond)
-    shadedErrorBar(2:nt,mean(prepp(1,:,icond,1,:),5),std(prepp(1,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(2:nt,mean(prepp(1,:,icond,1,:),5,'omitnan'),std(prepp(1,:,icond,1,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,1)),...
                     'lineprops',{'--','Color',graded_rgb2(icond,4)},'patchSaturation',.2);
     hold on;
-    shadedErrorBar(2:nt,mean(prepp(2,:,icond,1,:),5),std(prepp(2,:,icond,1,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(2:nt,mean(prepp(2,:,icond,1,:),5,'omitnan'),std(prepp(2,:,icond,1,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,1)),...
                     'lineprops',{'--','Color',graded_rgb2(3,4)},'patchSaturation',.2);
-    shadedErrorBar(2:nt,mean(prepp(1,:,icond,2,:),5),std(prepp(1,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(2:nt,mean(prepp(1,:,icond,2,:),5,'omitnan'),std(prepp(1,:,icond,2,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,2)),...
                     'lineprops',{'Color',graded_rgb2(icond,4)},'patchSaturation',.2);
-    shadedErrorBar(2:nt,mean(prepp(2,:,icond,2,:),5),std(prepp(2,:,icond,2,:),1,5)/sqrt(nsubj_epiph),...
+    shadedErrorBar(2:nt,mean(prepp(2,:,icond,2,:),5,'omitnan'),std(prepp(2,:,icond,2,:),1,5,'omitnan')/sqrt(nsubj_epiph(icond,2)),...
                     'lineprops',{'Color',graded_rgb2(3,4)},'patchSaturation',.2);
     if icond == 1
         ylabel(sprintf('p(repeat\nprevious)'));
@@ -743,13 +770,39 @@ for icond = 1:2
         set(hYLabel,'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
     end
 end
-sgtitle(sprintf('Model-free measures on epiphany split\n %d/%d subjs',nsubj_epiph,nsubj))
+if epiph_left_shift
+    sgtitle(sprintf('Epiphany split before report\nModel-free measures on epiphany split\n various n/%d subjs',nsubj))
+else
+    sgtitle(sprintf('Epiphany split after report\nModel-free measures on epiphany split\n %d/%d subjs',nsubj_epiph(1),nsubj))
+end
 
+% Evolution of confidence over time
+figure
+hold on
+for icond = 1:2
+    errorbar(1:4,mean(conf(icond,:,:),3,'omitnan'),std(conf(icond,:,:),1,3,'omitnan')/sqrt(nsubj_epiph(1)),'LineWidth',2,'Color',graded_rgb2(icond,4));
+end
+xlim([.5 4.5]);
+xticks(1:4)
+xlabel('Quarter')
+ylabel('Confidence rating')
+title('Evolution of mean confidence rating over the correct epiphany over time','FontSize',12)
 
+% Evolution of p(epiphany) over time
+pepiph = conf;
+pepiph(pepiph>=.6)  = 1;
+pepiph(pepiph<.6)   = 0;
 
-
-
-
+figure
+hold on
+for icond = 1:2
+    errorbar(1:4,mean(pepiph(icond,:,:),3,'omitnan'),std(pepiph(icond,:,:),1,3,'omitnan')/sqrt(nsubj_epiph(1)),'LineWidth',2,'Color',graded_rgb2(icond,4));
+end
+xlim([.5 4.5]);
+xticks(1:4)
+xlabel('Quarter')
+ylabel('p(epiphany)')
+title('Proportion of subjects reporting "epiphany" over time','FontSize',12)
 
 
 
